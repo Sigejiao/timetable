@@ -1,64 +1,165 @@
 from PyQt5.QtWidgets import QWidget, QLineEdit, QVBoxLayout, QToolTip, QApplication, QLabel
-from PyQt5.QtCore import Qt, QTimer, QPoint, QRectF  # 导入核心常量、定时器、点、矩形
-from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QCursor  # 导入绘图、颜色、画笔、字体、光标
-import math, datetime, json, os  # 导入数学和日期时间模块、json模块、os模块
+from PyQt5.QtCore import Qt, QTimer, QPoint, QRectF, QProcess
+from PyQt5.QtGui import QPainter, QColor, QPen, QFont, QCursor, QPixmap
+import math, datetime, json, os, bisect, subprocess, sys
 
-class ClockWindow(QWidget):  # 定义主窗口类，继承自QWidget
-    def __init__(self):  # 构造函数
-        super().__init__()  # 调用父类构造
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)  # 设置窗口置顶且无边框
-        self.setAttribute(Qt.WA_TranslucentBackground)  # 设置背景透明
-        self.setMouseTracking(True)  # 启用鼠标跟踪，确保能接收到鼠标移动事件
-        self.resize(260, 280)  # 设置窗口大小，高度从320调整到280
-        self.move_to_bottom_right()  # 移动窗口到屏幕右下角
-        
-        # 颜色列表
-        
+class ClockWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        # 窗口配置
+        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setMouseTracking(True)
+        self.resize(260, 280)
+        self.move_to_bottom_right()
+
+        # 恢复原来的20种颜色
         self.event_colors = [
-            QColor(247, 236, 181),  # Color 1 柔沙
-            QColor(228, 192, 126),  # Color 2 小麦
-            QColor(196, 154, 103),  # Color 3 暖驼
-            QColor(183, 139,  58),  # Color 4 卡其
-            QColor(166,  92,  42),  # Color 5 棕褐
-            QColor(218,  58,  27),  # Color 6 深朱
-            QColor(255,  79,   0),  # Color 7 朱红
-            QColor(255, 140,  26),  # Color 8 橙黄
-            QColor(255, 184,   0),  # Color 9 琥珀
-            QColor(196, 211,  19),  # Color 10 黄绿
-            QColor(153, 216,  75),  # Color 11 青柠
-            QColor( 64, 222,  90),  # Color 12 草绿
-            QColor(  0, 193, 127),  # Color 13 翠绿
-            QColor(  0, 179, 164),  # Color 14 青石
-            QColor(  0, 227, 201),  # Color 15 浅碧
-            QColor( 76, 207, 255),  # Color 16 天蓝
-            QColor(106, 143, 255),  # Color 17 薄荷蓝
-            QColor(155,  76, 255),  # Color 18 淡紫
-            QColor(222,  26, 173),  # Color 19 品红
-            QColor(255,  76, 143),  # Color 20 玫瑰
+            # 从绿色开始，沿色相环渐变
+            QColor( 64, 222,  90),  # Color 1 草绿
+            QColor(  0, 193, 127),  # Color 2 翠绿
+            QColor(  0, 179, 164),  # Color 3 青石
+            QColor(  0, 227, 201),  # Color 4 浅碧
+            QColor( 76, 187, 255),  # Color 5 天蓝
+            QColor(106, 143, 255),  # Color 6 薄荷蓝
+            QColor(155,  76, 255),  # Color 7 淡紫
+            QColor(222,  26, 173),  # Color 8 品红
+            QColor(255,  76, 143),  # Color 9 玫瑰
+            QColor(247, 236, 181),  # Color 10 柔沙
+            QColor(228, 192, 126),  # Color 11 小麦
+            QColor(196, 154, 103),  # Color 12 暖驼
+            QColor(183, 139,  58),  # Color 13 卡其
+            QColor(166,  92,  42),  # Color 14 棕褐
+            QColor(218,  58,  27),  # Color 15 深朱
+            QColor(255,  79,   0),  # Color 16 朱红
+            QColor(255, 140,  26),  # Color 17 橙黄
+            QColor(255, 184,   0),  # Color 18 琥珀
+            QColor(196, 211,  19),  # Color 19 黄绿
+            QColor(153, 216,  75),  # Color 20 青柠
         ]
 
-        
+        # 拖拽支持
+        self.dragging = False
+        self.drag_position = QPoint()
 
-        self.dragging = False  # 是否正在拖动
-        self.drag_position = QPoint()  # 拖动起始位置
-        
-        self.data_dir = "time_data"  # 数据文件夹
+        # 数据目录与今天
+        self.data_dir = "time_data"
         os.makedirs(self.data_dir, exist_ok=True)
         self.today = datetime.date.today().isoformat()
-        self.anchors = []  # [{"time": "08:00:00", "event": "未命名"}, ...]
         self.start_of_day = datetime.datetime.combine(datetime.date.today(), datetime.time(0, 0, 0))
-        self.load_anchors()
-        
-        self.ring_width_ratio = 0.15  # 圆环宽度为表盘半径的比例
-        self.hover_info = None  # 当前悬停的事件信息
-        
-        self.init_ui()  # 初始化界面
-        self.timer = QTimer(self)  # 创建定时器
-        self.timer.timeout.connect(self.update)  # 定时器超时后刷新界面
-        self.timer.start(1000)  # 每秒刷新一次
+        self.anchors = []
 
-    def get_today_file(self):
-        return os.path.join(self.data_dir, f"timedata_{self.today}.json")
+        # 预计算数据
+        self.anchor_seconds = []
+        self.anchor_events = []
+        self._anchor_segments = []
+
+        # 静态缓存标志与画布
+        self._static_pixmap = None
+        self._need_static_update = True
+
+        # 预计算几何 + 画笔
+        self._tick_coords = []
+        self._center = QPoint()
+        self._radius = 0
+        self._ring_width = 0
+        self.ring_width_ratio = 0.15
+        self._pens = {
+            'tick': QPen(QColor(130, 130, 130, 128), 2),
+            'hour_hand': QPen(QColor(0, 0, 0), 4),
+            'minute_hand': QPen(QColor(0, 0, 0), 2),
+            'second_hand': QPen(QColor(255, 0, 0), 1),
+            'button': QPen(QColor(50, 50, 50, 200), 2),
+        }
+
+        # 悬停标签
+        self.hover_label = QLabel(self)
+        self.hover_label.setWindowFlags(Qt.ToolTip | Qt.FramelessWindowHint)
+        self.hover_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)  # 让标签对鼠标透明
+        self.hover_label.setStyleSheet(
+            """
+            QLabel {
+                background-color: rgba(255, 255, 255, 0.95);
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                padding: 6px 8px;
+                color: #333333;
+                font-family: "Microsoft YaHei";
+                font-size: 12px;
+                font-weight: 500;
+            }
+            """
+        )
+        self.hover_label.hide()
+        self.last_mouse_pos = None
+        self.last_hover_text = ""
+
+        # 悬停节流定时器
+        self.hover_timer = QTimer(self)
+        self.hover_timer.setSingleShot(True)
+        self.hover_timer.timeout.connect(self._do_hover_detection)
+        
+        # 全局检测定时器（200ms轮询）
+        self.global_hover_timer = QTimer(self)
+        self.global_hover_timer.timeout.connect(self._check_hover_state)
+        self.global_hover_timer.start(200)
+
+        # 加载锚点与初始化UI
+        self.load_anchors()
+        self.init_ui()
+
+        # 指针定时重绘
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update)
+        self.timer.start(1000)
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        self.input = QLineEdit(self)
+        self.input.setPlaceholderText("输入事件名称...")
+        self.input.returnPressed.connect(self.on_enter)
+        # 设置输入框不拦截鼠标事件，让父窗口能接收到鼠标事件
+        self.input.setMouseTracking(True)
+        # 重写输入框的鼠标事件，让它们传递给父窗口
+        self.input.mouseMoveEvent = lambda a0: self.mouseMoveEvent(a0)
+        layout.addStretch()
+        layout.addWidget(self.input)
+        self.setLayout(layout)
+
+        self._compute_geometry()
+        self._render_static()
+
+    def move_to_bottom_right(self):
+        screen = QApplication.primaryScreen()
+        if screen:
+            geometry = screen.geometry()
+            self.move(geometry.width() - self.width() - 20, geometry.height() - self.height() - 40)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._need_static_update = True
+        self._compute_geometry()
+        self._render_static()
+
+    def _compute_geometry(self):
+        self._center = QPoint(self.width()//2, (self.height() - self.input.height())//2)
+        self._radius = int(min(self.width(), self.height() - self.input.height()) * 0.35)
+        self._ring_width = int(self._radius * self.ring_width_ratio)
+        
+        # 预计算刻度坐标
+        self._tick_coords = []
+        for i in range(60):
+            angle = math.radians(i * 6)
+            if i % 5 == 0:
+                line_len = int(self._radius * 0.17)
+            else:
+                line_len = int(self._radius * 0.09)
+            x1 = self._center.x() + (self._radius - line_len) * math.cos(angle - math.pi/2)
+            y1 = self._center.y() + (self._radius - line_len) * math.sin(angle - math.pi/2)
+            x2 = self._center.x() + self._radius * math.cos(angle - math.pi/2)
+            y2 = self._center.y() + self._radius * math.sin(angle - math.pi/2)
+            self._tick_coords.append((int(x1), int(y1), int(x2), int(y2)))
 
     def load_anchors(self):
         path = self.get_today_file()
@@ -67,473 +168,489 @@ class ClockWindow(QWidget):  # 定义主窗口类，继承自QWidget
             with open(path, 'r', encoding='utf-8') as f:
                 self.anchors = json.load(f)
         if not self.anchors:
-            # 新的一天，插入第一个锚点
             self.anchors.append({"time": self.start_of_day.strftime("%H:%M:%S"), "event": "未命名"})
             self.save_anchors()
+        self.precompute_anchor_data()
 
     def save_anchors(self):
         path = self.get_today_file()
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(self.anchors, f, ensure_ascii=False, indent=2)
 
-    def move_to_bottom_right(self):  # 移动窗口到屏幕右下角
-        screen = QApplication.primaryScreen()  # 获取主屏幕
-        if screen:
-            geometry = screen.geometry()  # 获取屏幕几何信息
-            self.move(geometry.width() - self.width() - 20, geometry.height() - self.height() - 40)  # 计算并移动
+    def get_today_file(self):
+        return os.path.join(self.data_dir, f"timedata_{self.today}.json")
 
-    def init_ui(self):  # 初始化界面控件
-        layout = QVBoxLayout(self)  # 创建垂直布局
-        layout.setContentsMargins(10, 10, 10, 10)  # 设置边距
-        self.input = QLineEdit(self)  # 创建文本输入框
-        self.input.setPlaceholderText("输入事件名称...")  # 设置占位提示
-        self.input.returnPressed.connect(self.on_enter)  # 回车时调用on_enter
-        # 设置输入框不拦截鼠标事件，让父窗口能接收到鼠标事件
-        self.input.setMouseTracking(True)
-        # 重写输入框的鼠标事件，让它们传递给父窗口
-        self.input.mouseMoveEvent = lambda a0: self.mouseMoveEvent(a0)
-        layout.addStretch()  # 添加弹性空间
-        layout.addWidget(self.input)  # 添加输入框到布局
-        self.setLayout(layout)  # 应用布局
+    def precompute_anchor_data(self):
+        """预计算锚点数据和环段几何"""
+        self.anchor_seconds = []
+        self.anchor_events = []
+        self._anchor_segments = []
+        
+        for i, anchor in enumerate(self.anchors):
+            h, m, s = map(int, anchor["time"].split(':'))
+            seconds = h * 3600 + m * 60 + s
+            self.anchor_seconds.append(seconds)
+            
+            start_time = anchor["time"]
+            if i + 1 < len(self.anchors):
+                end_time = self.anchors[i + 1]["time"]
+            else:
+                end_time = datetime.datetime.now().strftime("%H:%M:%S")
+            
+            self.anchor_events.append({
+                "start_time": start_time,
+                "end_time": end_time,
+                "event_name": anchor["event"],
+                "color_index": i % len(self.event_colors)
+            })
+            
+            # 预计算环段几何数据
+            if i + 1 < len(self.anchors):
+                # 历史环段（静态）
+                start_dt = datetime.datetime.strptime(start_time, "%H:%M:%S")
+                end_dt = datetime.datetime.strptime(end_time, "%H:%M:%S")
+                self._anchor_segments.append({
+                    'start': start_dt,
+                    'end': end_dt,
+                    'color': self.event_colors[i % len(self.event_colors)],
+                    'is_current': False
+                })
+        
+        # 标记需要更新静态内容
+        self._need_static_update = True
 
-    def on_enter(self):  # 输入框回车事件
-        try:
-            event_name = self.input.text().strip()
-            if event_name:
-                now = datetime.datetime.now().strftime("%H:%M:%S")
-                self.anchors.append({"time": now, "event": event_name})
-                self.save_anchors()
-                self.input.clear()
-                self.update()
-        except Exception as e:
-            print(f"Error in on_enter: {e}")
+    def _render_static(self):
+        """渲染静态内容到QPixmap缓存"""
+        if not self._need_static_update:
+            return
+            
+        self._static_pixmap = QPixmap(self.size())
+        self._static_pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(self._static_pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 绘制窗口背景
+        painter.setBrush(QColor(240, 240, 240, 128))
+        painter.setPen(QPen(QColor(200, 200, 200, 128), 1))
+        painter.drawRoundedRect(self.rect(), 10, 10)
+        
+        # 画底色圆
+        painter.setBrush(QColor(255, 255, 224))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(self._center, self._radius, self._radius)
+        
+        # 绘制表盘刻度
+        painter.setPen(self._pens['tick'])
+        for x1, y1, x2, y2 in self._tick_coords:
+            painter.drawLine(x1, y1, x2, y2)
+        
+        # 画右上角按钮区域
+        button_size = int(self.width() * 0.07)
+        margin = int(self.width() * 0.03)
+        
+        # 画☰按钮（在X左侧）
+        menu_center_x = self.width() - margin - button_size - button_size - 5  # X左侧留5px间距
+        menu_center_y = margin + button_size // 2
+        painter.setPen(self._pens['button'])
+        
+        # 绘制☰符号（三条横线）
+        line_length = button_size // 2
+        line_spacing = button_size // 6
+        
+        # 第一条线
+        painter.drawLine(
+            menu_center_x - line_length//2, 
+            menu_center_y - line_spacing, 
+            menu_center_x + line_length//2, 
+            menu_center_y - line_spacing
+        )
+        # 第二条线
+        painter.drawLine(
+            menu_center_x - line_length//2, 
+            menu_center_y, 
+            menu_center_x + line_length//2, 
+            menu_center_y
+        )
+        # 第三条线
+        painter.drawLine(
+            menu_center_x - line_length//2, 
+            menu_center_y + line_spacing, 
+            menu_center_x + line_length//2, 
+            menu_center_y + line_spacing
+        )
+        
+        # 画X按钮
+        x_center_x = self.width() - margin - button_size // 2
+        x_center_y = margin + button_size // 2
+        painter.drawLine(x_center_x - button_size//2, x_center_y - button_size//2, 
+                        x_center_x + button_size//2, x_center_y + button_size//2)
+        painter.drawLine(x_center_x + button_size//2, x_center_y - button_size//2, 
+                        x_center_x - button_size//2, x_center_y + button_size//2)
+        
+        # 绘制历史环段（静态部分）
+        self._draw_static_segments(painter)
+        
+        painter.end()
+        self._need_static_update = False
+
+    def _draw_static_segments(self, painter):
+        """绘制静态的历史环段"""
+        if not self._anchor_segments:
+            return
+            
+        for segment in self._anchor_segments:
+            if segment['end'] <= datetime.datetime.now():
+                # 只绘制已完成的历史环段
+                self._draw_single_segment(painter, segment['start'], segment['end'], segment['color'])
+
+    def _draw_single_segment(self, painter, start, end, color):
+        """绘制单个环段"""
+        # 计算当天的中午12点
+        noon = datetime.datetime.combine(start.date(), datetime.time(12, 0, 0))
+        
+        # 环半径
+        inner_radius = self._radius + self._ring_width//2
+        outer_radius = self._radius + self._ring_width + self._ring_width//2
+        
+        if start < noon and end > noon:
+            # 跨中午的情况
+            self._draw_arc_part(painter, inner_radius, start, noon - datetime.timedelta(seconds=1), color)
+            self._draw_arc_part(painter, outer_radius, noon, end, color)
+        elif start >= noon:
+            # 全部下午
+            self._draw_arc_part(painter, outer_radius, start, end, color)
+        else:
+            # 全部上午
+            self._draw_arc_part(painter, inner_radius, start, end, color)
+
+    def _draw_arc_part(self, painter, ring_radius, start, end, color):
+        """绘制单个环上的弧段"""
+        def time_to_angle(dt):
+            seconds = (dt - self.start_of_day).total_seconds()
+            angle = (seconds / 43200) * 360
+            return angle
+            
+        start_angle = time_to_angle(start)
+        end_angle = time_to_angle(end)
+        span = (end_angle - start_angle) % 360
+        if span == 0 and start != end:
+            span = 360
+            
+        start_angle_qt = int((90 - start_angle) * 16)
+        span_angle_qt = int(-span * 16)
+        
+        painter.setPen(QPen(color, self._ring_width))
+        painter.drawArc(
+            QRectF(self._center.x()-ring_radius, self._center.y()-ring_radius, 
+                   2*ring_radius, 2*ring_radius),
+            start_angle_qt, span_angle_qt
+        )
 
     def paintEvent(self, event):
         try:
             painter = QPainter(self)
             painter.setRenderHint(QPainter.Antialiasing)
             
-            # 绘制窗口背景
-            painter.setBrush(QColor(240, 240, 240, 128))
-            painter.setPen(QPen(QColor(200, 200, 200, 128), 1))
-            painter.drawRoundedRect(self.rect(), 10, 10)
+            # 1. 绘制静态缓存内容
+            if self._static_pixmap:
+                painter.drawPixmap(0, 0, self._static_pixmap)
             
-            # 自适应表盘中心和半径
-            center = QPoint(self.width()//2, (self.height() - self.input.height())//2)
-            radius = int(min(self.width(), self.height() - self.input.height()) * 0.35)
+            # 2. 绘制动态内容：当前时间段（如果存在）
+            self._draw_current_segment(painter)
             
-            # 画底色圆（完全不透明）
-            painter.setBrush(QColor(255, 255, 224))
-            painter.setPen(Qt.NoPen)
-            painter.drawEllipse(center, radius, radius)
-            
-            # 绘制表盘刻度
-            painter.setPen(QPen(QColor(130, 130, 130, 128), 2))
-            for i in range(60):
-                angle = math.radians(i * 6)
-                if i % 5 == 0:
-                    line_len = int(radius * 0.17)
-                else:
-                    line_len = int(radius * 0.09)
-                x1 = center.x() + (radius - line_len) * math.cos(angle - math.pi/2)
-                y1 = center.y() + (radius - line_len) * math.sin(angle - math.pi/2)
-                x2 = center.x() + radius * math.cos(angle - math.pi/2)
-                y2 = center.y() + radius * math.sin(angle - math.pi/2)
-                painter.drawLine(int(x1), int(y1), int(x2), int(y2))
-            
-            # 画右上角X符号
-            x_size = int(self.width() * 0.07)
-            margin = int(self.width() * 0.03)
-            x_center_x = self.width() - margin - x_size // 2
-            x_center_y = margin + x_size // 2
-            painter.setPen(QPen(QColor(50, 50, 50, 200), max(2, x_size // 7)))
-            painter.drawLine(x_center_x - x_size//2, x_center_y - x_size//2, x_center_x + x_size//2, x_center_y + x_size//2)
-            painter.drawLine(x_center_x + x_size//2, x_center_y - x_size//2, x_center_x - x_size//2, x_center_y + x_size//2)
-            
-            # 计算圆环宽度（表盘半径的0.1倍）
-            self.draw_ring_width = int(radius * self.ring_width_ratio)
-            # 绘制历史圆环段
-            self.draw_segments(painter, center, radius)
-            
-            # 画时钟指针
+            # 3. 绘制时钟指针
             now = datetime.datetime.now()
-            self.draw_clock_hands(painter, center, radius, now.hour, now.minute, now.second)
-            
-            # 绘制悬停标签
-            if self.hover_info:
-                # 获取当前鼠标位置
-                mouse_pos = self.mapFromGlobal(self.cursor().pos())
-                self.draw_hover_tooltip(painter, mouse_pos, self.hover_info)
-            
+            self._draw_clock_hands(painter, now.hour, now.minute, now.second)
 
         except Exception as e:
             print(f"Error in paintEvent: {e}")
             import traceback
             traceback.print_exc()
 
-    def draw_segments(self, painter, center, radius):
+    def _draw_current_segment(self, painter):
+        """绘制当前进行中的时间段（动态）"""
         if not self.anchors:
             return
+            
+        # 找到当前时间段
         now = datetime.datetime.now()
-        # 组装所有锚点的时间
-        points = []
-        for anchor in self.anchors:
-            t = datetime.datetime.strptime(anchor["time"], "%H:%M:%S").time()
-            dt = datetime.datetime.combine(now.date(), t)
-            points.append(dt)
-        points.append(now)  # 最后一段到当前时间
-        # 绘制分段
-        for i in range(len(points)-1):
-            start = points[i]
-            end = points[i+1]
-            event_name = self.anchors[i]["event"]
-            color = self.event_colors[i % len(self.event_colors)]
-            self.draw_arc_segment_cross_ring(painter, center, radius, start, end, color)
+        current_time = now.time()
+        
+        for i, anchor in enumerate(self.anchors):
+            start_time = datetime.datetime.strptime(anchor["time"], "%H:%M:%S").time()
+            
+            if i + 1 < len(self.anchors):
+                end_time = datetime.datetime.strptime(self.anchors[i + 1]["time"], "%H:%M:%S").time()
+            else:
+                # 最后一个时间段到当前时间
+                if start_time <= current_time:
+                    # 绘制从开始到当前时间的弧段
+                    start_dt = datetime.datetime.combine(now.date(), start_time)
+                    color = self.event_colors[i % len(self.event_colors)]
+                    self._draw_single_segment(painter, start_dt, now, color)
+                break
 
-    def draw_arc_segment(self, painter, center, radius, start, end, color):
-        # 以start_of_day为0度，顺时针
-        def time_to_angle(dt):
-            seconds = (dt - self.start_of_day).total_seconds()
-            angle = (seconds / 43200) * 360  # 12小时一圈
-            return angle
-        start_angle = time_to_angle(start)
-        end_angle = time_to_angle(end)
-        span = (end_angle - start_angle) % 360
-        start_angle_qt = int((90 - start_angle) * 16)
-        span_angle_qt = int(-span * 16)
-        painter.setPen(QPen(color, max(6, radius//10)))
-        painter.drawArc(QRectF(center.x()-radius, center.y()-radius, 2*radius, 2*radius), start_angle_qt, span_angle_qt)
-
-    def draw_arc_segment_cross_ring(self, painter, center, radius, start, end, color):
-        """绘制跨环的时间段（上午画内环，下午画外环）"""
-        # 计算当天的中午12点（注意：noon的日期与start一致，若start跨天可能导致问题）
-        noon = datetime.datetime.combine(start.date(), datetime.time(12, 0, 0))
-        # 使用统一管理的宽度参数
-        # 内环内界贴合表盘外界，外环内界贴合内环外界
-        inner_radius = radius + self.draw_ring_width//2  # 内环半径：表盘半径 + 圆环宽度的一半
-        outer_radius = radius + self.draw_ring_width + self.draw_ring_width//2  # 外环半径：表盘半径 + 圆环宽度 + 圆环宽度的一半
-        # print(f"[cross_ring] 调用: start={start}, end={end}, noon={noon}")
-        if start < noon and end > noon:
-            # print(f"[cross_ring] 跨中午: {start} ~ {noon} (内环), {noon} ~ {end} (外环)")
-            # 内环只画到11:59:59，避免span=0
-            self.draw_arc_segment_part(painter, center, inner_radius, start, noon - datetime.timedelta(seconds=1), color)
-            self.draw_arc_segment_part(painter, center, outer_radius, noon, end, color)
-        elif start >= noon:
-            # print(f"[cross_ring] 全部下午: {start} ~ {end} (外环)")
-            self.draw_arc_segment_part(painter, center, outer_radius, start, end, color)
-        else:
-            # print(f"[cross_ring] 全部上午: {start} ~ {end} (内环)")
-            self.draw_arc_segment_part(painter, center, inner_radius, start, end, color)
-
-    def draw_arc_segment_part(self, painter, center, ring_radius, start, end, color):
-        """绘制单个环上的时间段"""
-        def time_to_angle(dt):
-            seconds = (dt - self.start_of_day).total_seconds()
-            angle = (seconds / 43200) * 360
-            return angle
-        start_angle = time_to_angle(start)
-        end_angle = time_to_angle(end)
-        span = (end_angle - start_angle) % 360
-        if span == 0 and start != end:
-            span = 360  # 画整圈
-        start_angle_qt = int((90 - start_angle) * 16)
-        span_angle_qt = int(-span * 16)
-        # print(f"[part] 调用: ring_radius={ring_radius}, start={start}, end={end}, start_angle={start_angle}, end_angle={end_angle}, span={span}")
-        painter.setPen(QPen(color, self.draw_ring_width))  # 使用统一管理的宽度
-        painter.drawArc(
-            QRectF(center.x()-ring_radius, center.y()-ring_radius, 2*ring_radius, 2*ring_radius),
-            start_angle_qt, span_angle_qt
-        )
-
-    def draw_clock_hands(self, painter, center, radius, hour, minute, second):
+    def _draw_clock_hands(self, painter, hour, minute, second):
+        """绘制时钟指针"""
         try:
             # 时针
             painter.save()
-            painter.setPen(QPen(QColor(0,0,0), 4))
+            painter.setPen(self._pens['hour_hand'])
             angle = (hour % 12 + minute/60) * 30
-            self.draw_hand(painter, center, radius*0.6, angle)
+            self._draw_hand(painter, self._center, self._radius*0.6, angle)
             painter.restore()
             
             # 分针
             painter.save()
-            painter.setPen(QPen(QColor(0,0,0), 2))
+            painter.setPen(self._pens['minute_hand'])
             angle = (minute + second/60) * 6
-            self.draw_hand(painter, center, radius*0.8, angle)
+            self._draw_hand(painter, self._center, self._radius*0.8, angle)
             painter.restore()
             
             # 秒针
             painter.save()
-            painter.setPen(QPen(QColor(255,0,0), 1))
+            painter.setPen(self._pens['second_hand'])
             angle = second * 6
-            self.draw_hand(painter, center, radius*0.9, angle)
+            self._draw_hand(painter, self._center, self._radius*0.9, angle)
             painter.restore()
             
             # 绘制中心点
             painter.setBrush(QColor(0,0,0))
             painter.setPen(Qt.NoPen)
-            painter.drawEllipse(center, 3, 3)
+            painter.drawEllipse(self._center, 3, 3)
         except Exception as e:
-            print(f"Error in draw_clock_hands: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Error in _draw_clock_hands: {e}")
 
-    def draw_hand(self, painter, center, length, angle):
+    def _draw_hand(self, painter, center, length, angle):
+        """绘制指针"""
         try:
-            
             rad = math.radians(90 - angle)
             end_x = center.x() + length * math.cos(rad)
             end_y = center.y() - length * math.sin(rad)
             end = QPoint(int(end_x), int(end_y))
             painter.drawLine(center, end)
         except Exception as e:
-            print(f"Error in draw_hand: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Error in _draw_hand: {e}")
 
-    def mousePressEvent(self, event):  # 鼠标按下事件
-        if event.button() == Qt.LeftButton:  # 左键按下
-            # 检查是否点击了右上角X
-            x_size = int(self.width() * 0.07)
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            button_size = int(self.width() * 0.07)
             margin = int(self.width() * 0.03)
-            x_left = self.width() - margin - x_size
+            
+            # 检查是否点击了☰按钮
+            menu_left = self.width() - margin - button_size - button_size - 5 - button_size//2
+            menu_top = margin
+            menu_rect = QRectF(menu_left, menu_top, button_size, button_size)
+            if menu_rect.contains(event.pos()):
+                self.run_time_manage()
+                return
+            
+            # 检查是否点击了X按钮
+            x_left = self.width() - margin - button_size
             x_top = margin
-            x_rect = QRectF(x_left, x_top, x_size, x_size)
+            x_rect = QRectF(x_left, x_top, button_size, button_size)
             if x_rect.contains(event.pos()):
                 QApplication.quit()
                 return
-            self.dragging = True  # 开始拖动
-            self.drag_position = event.globalPos() - self.frameGeometry().topLeft()  # 记录拖动起始位置
-            event.accept()  # 接受事件
+                
+            self.dragging = True
+            self.drag_position = event.globalPos() - self.frameGeometry().topLeft()
+            event.accept()
 
-    def mouseMoveEvent(self, event):  # 鼠标移动事件
-        # print(f"[鼠标移动] 事件被调用 - 位置:({event.pos().x()},{event.pos().y()}), 按钮状态:{event.buttons()}, 拖动状态:{self.dragging}")
-        
-        if event.buttons() == Qt.LeftButton and self.dragging:  # 左键按下且正在拖动
-            self.move(event.globalPos() - self.drag_position)  # 移动窗口
-            event.accept()  # 接受事件
+    def run_time_manage(self):
+        """运行timeManage.py"""
+        try:
+            # 获取当前脚本所在目录
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            time_manage_path = os.path.join(current_dir, "timeManage.py")
+            
+            # 检查文件是否存在
+            if os.path.exists(time_manage_path):
+                # 使用subprocess启动timeManage.py
+                subprocess.Popen([sys.executable, time_manage_path], 
+                               cwd=current_dir,
+                               creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0)
+                print(f"已启动 timeManage.py: {time_manage_path}")
+            else:
+                print(f"timeManage.py 文件不存在: {time_manage_path}")
+        except Exception as e:
+            print(f"启动 timeManage.py 时出错: {e}")
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.dragging = False
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.LeftButton and self.dragging:
+            self.move(event.globalPos() - self.drag_position)
+            event.accept()
         else:
-            # print("进入位置检测模块")
-            # 悬停检测：鼠标没有按下时检测圆环区域
+            # 轻量操作：始终跟随鼠标位置
             if not event.buttons():
-                # 计算圆环参数
-                center_x = self.width() // 2
-                center_y = (self.height() - self.input.height()) // 2
-                radius = int(min(self.width(), self.height() - self.input.height()) * 0.35)
+                pos = event.pos()
+                self.last_mouse_pos = pos  # 始终记录最新位置
                 
-                # 计算鼠标到圆环中心的距离
-                mouse_x = event.pos().x()
-                mouse_y = event.pos().y()
-                distance = math.sqrt((mouse_x - center_x)**2 + (mouse_y - center_y)**2)
-                
-                # 计算圆环宽度（表盘半径的0.1倍）
-                ring_width = int(radius * self.ring_width_ratio)  # 与绘制部分保持一致
-                # 内环内界贴合表盘外界，外环内界贴合内环外界
-                inner_radius = radius + ring_width//2  # 内环半径：表盘半径 + 圆环宽度的一半
-                outer_radius = radius + ring_width + ring_width//2  # 外环半径：表盘半径 + 圆环宽度 + 圆环宽度的一半
-                
-                # 检测鼠标位置
-                # 内环区域：从表盘外界(radius)到内环外界(inner_radius + ring_width//2)
-                inner_ring_outer = inner_radius + ring_width//2
-                # 外环区域：从内环外界到外环外界(outer_radius + ring_width//2)
-                outer_ring_outer = outer_radius + ring_width//2
-                
-                if distance < radius - 5:
-                    print(f"[悬停检测] 鼠标在表盘内部 - 位置:({mouse_x},{mouse_y}), 距离:{distance:.1f}, 表盘半径:{radius}")
-                elif radius - 2 <= distance <= inner_ring_outer + 2:
-                    print(f"[悬停检测] 鼠标在内环区域 - 位置:({mouse_x},{mouse_y}), 距离:{distance:.1f}, 内环范围:{radius}-{inner_ring_outer}")
-                    # 在内环区域时，计算角度和时间（上午时间）
-                    angle = self.mouse_pos_to_angle(mouse_x, mouse_y, center_x, center_y)
-                    time_str = self.angle_to_time(angle)
-                    print(f"[角度计算] 内环角度:{angle:.1f}°, 对应上午时间:{time_str}")
+                # 检查是否在圆环区域内
+                if self._is_in_ring(pos):
+                    # 计算标签位置（避免遮挡鼠标）
+                    global_pos = self.mapToGlobal(pos + QPoint(15, -15))
+                    self.hover_label.move(global_pos)
                     
-                    # 查找对应事件并更新悬停信息
-                    target_time = datetime.datetime.strptime(time_str, "%H:%M:%S")
-                    self.hover_info = self.find_event_at_time(target_time)
-                    self.update()  # 触发重绘
-                elif inner_ring_outer + 2 < distance <= outer_ring_outer + 2:
-                    print(f"[悬停检测] 鼠标在外环区域 - 位置:({mouse_x},{mouse_y}), 距离:{distance:.1f}, 外环范围:{inner_ring_outer}-{outer_ring_outer}")
-                    # 在外环区域时，计算角度和时间（下午时间，+12小时）
-                    angle = self.mouse_pos_to_angle(mouse_x, mouse_y, center_x, center_y)
-                    time_str = self.angle_to_time_afternoon(angle)
-                    print(f"[角度计算] 外环角度:{angle:.1f}°, 对应下午时间:{time_str}")
-                    
-                    # 查找对应事件并更新悬停信息
-                    target_time = datetime.datetime.strptime(time_str, "%H:%M:%S")
-                    self.hover_info = self.find_event_at_time(target_time)
-                    self.update()  # 触发重绘
+                    # 启动内容更新定时器
+                    if not self.hover_timer.isActive():
+                        self.hover_timer.start(50)  # 缩短到50ms提高响应速度
                 else:
-                    print(f"[悬停检测] 鼠标超出检测范围 - 位置:({mouse_x},{mouse_y}), 距离:{distance:.1f}, 检测上限:{outer_ring_outer+2}")
-                    # 清空悬停信息
-                    if self.hover_info is not None:
-                        self.hover_info = None
-                        self.update()  # 触发重绘
+                    # 不在圆环区域，立即隐藏标签
+                    self.hover_label.hide()
+                    self.last_hover_text = ""
+                    self.hover_timer.stop()  # 停止定时器
 
-    # def find_segment_at_angle(self, angle, ring_type):
-    #     """根据角度和圆环类型找到对应的时段"""
-    #     # 检查历史时段
-    #     for i, (start_time, end_time, event_name, color) in enumerate(self.time_segments):
-    #         if self.get_ring_info(start_time) == ring_type:
-    #             start_angle = self.time_to_angle(start_time)
-    #             end_angle = self.time_to_angle(end_time)
-    #             
-    #             # 处理跨越0度的情况
-    #             if end_angle < start_angle:
-    #                 if angle >= start_angle or angle <= end_angle:
-    #                     return i
-    #             else:
-    #                 if start_angle <= angle <= end_angle:
-    #                     return i
-    #         
-    #         # 检查当前时段
-    #         if self.current_segment_start is not None:
-    #             if self.get_ring_info(self.current_segment_start) == ring_type:
-    #                 start_angle = self.time_to_angle(self.current_segment_start)
-    #                 now = datetime.datetime.now()
-    #                 current_angle = self.time_to_angle(now)
-    #                 
-    #                 if current_angle < start_angle:
-    #                     if angle >= start_angle or angle <= current_angle:
-    #                         return len(self.time_segments)
-    #                 else:
-    #                     if start_angle <= angle <= current_angle:
-    #                         return len(self.time_segments)
-    #         
-    #         return None
+    def _is_in_ring(self, pos):
+        """检查鼠标是否在圆环区域内"""
+        center_x = self.width() // 2
+        center_y = (self.height() - self.input.height()) // 2
+        radius = int(min(self.width(), self.height() - self.input.height()) * 0.35)
+        
+        mouse_x, mouse_y = pos.x(), pos.y()
+        distance = math.sqrt((mouse_x - center_x)**2 + (mouse_y - center_y)**2)
+        
+        ring_width = int(radius * self.ring_width_ratio)
+        inner_radius = radius + ring_width//2
+        outer_radius = radius + ring_width + ring_width//2
+        
+        inner_ring_outer = inner_radius + ring_width//2
+        outer_ring_outer = outer_radius + ring_width//2
+        
+        # 放宽检测边界，增加容错范围
+        return (radius - 5 <= distance <= inner_ring_outer + 5 or 
+                inner_ring_outer - 2 < distance <= outer_ring_outer + 5)
 
-    def draw_hover_tooltip(self, painter, mouse_pos, event_info):
-        """绘制悬停标签"""
-        if not event_info:
+    def _do_hover_detection(self):
+        """定时器回调：内容更新（节流）"""
+        if not self.last_mouse_pos:
             return
             
-        # 设置字体
-        font = QFont("Microsoft YaHei", 9)
-        painter.setFont(font)
+        pos = self.last_mouse_pos
         
-        # 准备文本内容
-        time_text = f"{event_info['start_time']} - {event_info['end_time']}"
-        event_text = event_info['event_name']
+        # 再次检查是否在环内（双重保险）
+        if not self._is_in_ring(pos):
+            self.hover_label.hide()
+            self.last_hover_text = ""
+            return
         
-        # 计算文本尺寸
-        time_rect = painter.fontMetrics().boundingRect(time_text)
-        event_rect = painter.fontMetrics().boundingRect(event_text)
+        # 计算角度和时间
+        angle = self._calc_angle(pos)
+        is_afternoon = self._is_afternoon_ring(pos)
         
-        # 计算标签位置（避免遮挡鼠标）
-        offset_x = 15
-        offset_y = -15
-        label_x = mouse_pos.x() + offset_x
-        label_y = mouse_pos.y() + offset_y
-        
-        # 边界检测，确保标签不超出窗口
-        max_text_width = max(time_rect.width(), event_rect.width())
-        if label_x + max_text_width > self.width():
-            label_x = mouse_pos.x() - max_text_width - offset_x
-        
-        # 修改下边界检测：当鼠标比表盘圆心低时，标签向上偏移
-        center_y = (self.height() - self.input.height()) // 2  # 表盘圆心Y坐标
-        if mouse_pos.y() > center_y:
-            label_y = mouse_pos.y() - (time_rect.height() + event_rect.height() + 8) - offset_y
-        
-        if label_y < 0:
-            label_y = mouse_pos.y() + offset_y
-        
-        # 判断标签在鼠标左侧还是右侧，设置对齐方式
-        if label_x < mouse_pos.x():
-            # 标签在鼠标左侧，右对齐
-            time_x = label_x + max_text_width - time_rect.width()
-            event_x = label_x + max_text_width - event_rect.width()
+        if is_afternoon:
+            target_seconds = int((angle / 360) * 43200) + 43200  # 下午时间
         else:
-            # 标签在鼠标右侧，左对齐
-            time_x = label_x
-            event_x = label_x
+            target_seconds = int((angle / 360) * 43200)  # 上午时间
+        
+        # 二分查找事件
+        event_info = self._find_event_at_seconds(target_seconds)
+        
+        # 生成标签文本
+        new_text = ""
+        if event_info:
+            new_text = f"{event_info['start_time']} - {event_info['end_time']}\n{event_info['event_name']}"
+        
+        # 只有内容真正改变时才更新
+        if new_text != self.last_hover_text:
+            if new_text:
+                self.hover_label.setText(new_text)
+                self.hover_label.show()
+            else:
+                self.hover_label.hide()
+            self.last_hover_text = new_text
 
-        # 绘制文本
-        painter.setPen(QColor(50, 50, 50))
-        time_y = label_y + time_rect.height()
-        painter.drawText(time_x, time_y, time_text)
-        # 下划线严格跟随文字宽度
-        painter.setPen(QPen(QColor(50, 50, 50), 1))
-        painter.drawLine(time_x, time_y + 2, time_x + time_rect.width(), time_y + 2)
+    def _calc_angle(self, pos):
+        """计算鼠标位置对应的角度"""
+        center_x = self.width() // 2
+        center_y = (self.height() - self.input.height()) // 2
+        
+        dx = pos.x() - center_x
+        dy = pos.y() - center_y
+        angle = math.degrees(math.atan2(-dy, -dx))
+        return (angle + 270) % 360
 
-        event_y = time_y + event_rect.height() + 4
-        painter.setPen(QColor(50, 50, 50))
-        painter.drawText(event_x, event_y, event_text)
-        painter.setPen(QPen(QColor(50, 50, 50), 1))
-        painter.drawLine(event_x, event_y + 2, event_x + event_rect.width(), event_y + 2)
+    def _is_afternoon_ring(self, pos):
+        """判断是否在外环（下午时间）"""
+        center_x = self.width() // 2
+        center_y = (self.height() - self.input.height()) // 2
+        radius = int(min(self.width(), self.height() - self.input.height()) * 0.35)
+        
+        mouse_x, mouse_y = pos.x(), pos.y()
+        distance = math.sqrt((mouse_x - center_x)**2 + (mouse_y - center_y)**2)
+        
+        ring_width = int(radius * self.ring_width_ratio)
+        inner_radius = radius + ring_width//2
+        outer_radius = radius + ring_width + ring_width//2
+        
+        inner_ring_outer = inner_radius + ring_width//2
+        outer_ring_outer = outer_radius + ring_width//2
+        
+        return inner_ring_outer + 2 < distance <= outer_ring_outer + 2
 
-    def mouseReleaseEvent(self, event):  # 鼠标释放事件
-        if event.button() == Qt.LeftButton:  # 左键释放
-            self.dragging = False  # 停止拖动
-            event.accept()  # 接受事件
-
-    def enterEvent(self, event):  # 鼠标进入事件
-        self.update()  # 刷新界面
-
-
-
-    def leaveEvent(self, event):  # 鼠标离开事件
-        self.update()  # 刷新界面
-
-    def mouse_pos_to_angle(self, mouse_x, mouse_y, center_x, center_y):
-        """将鼠标位置转换为角度（0-360度）"""
-        # 计算相对于圆心的角度
-        dx = mouse_x - center_x
-        dy = mouse_y - center_y
-        angle = math.degrees(math.atan2(-dy, -dx))  # 负dy和负dx实现水平翻转
-        return (angle + 270) % 360  # 调整到12点方向为0度，旋转180度
-
-    def angle_to_time(self, angle):
-        """将角度转换为时间字符串（上午时间）"""
-        # 12小时制映射：0度=00:00, 90度=06:00, 180度=12:00, 270度=18:00
-        seconds = int((angle / 360) * 43200)  # 12小时=43200秒
-        hours = seconds // 3600
-        minutes = (seconds % 3600) // 60
-        return f"{hours:02d}:{minutes:02d}:00"
-
-    def angle_to_time_afternoon(self, angle):
-        """将角度转换为时间字符串（下午时间，+12小时）"""
-        # 12小时制映射：0度=12:00, 90度=18:00, 180度=00:00, 270度=06:00
-        seconds = int((angle / 360) * 43200)  # 12小时=43200秒
-        hours = (seconds // 3600 + 12) % 24  # 加12小时并确保在24小时内
-        minutes = (seconds % 3600) // 60
-        return f"{hours:02d}:{minutes:02d}:00"
-
-    def find_event_at_time(self, target_time):
-        """根据时间点查找对应的事件信息"""
-        if not self.anchors:
+    def _find_event_at_seconds(self, target_seconds):
+        """使用二分查找快速定位事件"""
+        if not self.anchor_seconds:
             return None
             
-        # 将target_time转换为time对象进行比较
-        target_time_obj = target_time.time() if hasattr(target_time, 'time') else target_time
-        
-        # 遍历anchors查找对应时间段
-        for i in range(len(self.anchors)):
-            start_time_str = self.anchors[i]["time"]
-            start_time_obj = datetime.datetime.strptime(start_time_str, "%H:%M:%S").time()
+        # 特别处理第一个事件（00:00:00开始）
+        if target_seconds <= self.anchor_seconds[0]:
+            return self.anchor_events[0]
             
-            # 确定结束时间
-            if i + 1 < len(self.anchors):
-                end_time_str = self.anchors[i + 1]["time"]
-                end_time_obj = datetime.datetime.strptime(end_time_str, "%H:%M:%S").time()
-            else:
-                # 最后一个时间段到当前时间
-                end_time_obj = datetime.datetime.now().time()
+        idx = bisect.bisect_right(self.anchor_seconds, target_seconds) - 1
+        
+        if idx >= 0:
+            return self.anchor_events[idx]
+        else:
+            # 如果找不到匹配的事件，返回第一个事件作为默认
+            return self.anchor_events[0] if self.anchor_events else None
+
+    def leaveEvent(self, event):
+        """鼠标离开窗口时隐藏标签"""
+        self.hover_label.hide()
+        self.last_hover_text = ""
+
+    def enterEvent(self, event):
+        # 鼠标进入窗口时立即触发一次检测
+        self.last_mouse_pos = event.pos()
+        if not self.hover_timer.isActive():
+            self.hover_timer.start(50)  # 缩短到50ms提高响应速度
+        self.update()
+
+    def _check_hover_state(self):
+        """全局检测定时器回调：检查鼠标是否还在环内"""
+        if not self.last_mouse_pos:
+            return
             
-            # 判断target_time是否在这个时间段内
-            if start_time_obj <= target_time_obj < end_time_obj:
-                return {
-                    "start_time": start_time_str,
-                    "end_time": end_time_str if i + 1 < len(self.anchors) else datetime.datetime.now().strftime("%H:%M:%S"),
-                    "event_name": self.anchors[i]["event"],
-                    "color_index": i % len(self.event_colors)
-                }
-        
-        # 如果target_time在第一个锚点之前
-        if self.anchors and target_time_obj < datetime.datetime.strptime(self.anchors[0]["time"], "%H:%M:%S").time():
-            return {
-                "start_time": "00:00:00",
-                "end_time": self.anchors[0]["time"],
-                "event_name": "未定义时间段",
-                "color_index": 0
-            }
-        
-        return None 
+        # 检查鼠标是否还在环内
+        if not self._is_in_ring(self.last_mouse_pos):
+            # 不在环内，立即隐藏标签
+            self.hover_label.hide()
+            self.last_hover_text = ""
+            self.hover_timer.stop()  # 停止节流定时器
+
+    def on_enter(self):
+        try:
+            event_name = self.input.text().strip()
+            if event_name:
+                now = datetime.datetime.now().strftime("%H:%M:%S")
+                self.anchors.append({"time": now, "event": event_name})
+                self.save_anchors()
+                self.precompute_anchor_data()
+                self._render_static()  # 重新渲染静态内容
+                self.input.clear()
+                self.update()
+        except Exception as e:
+            print(f"Error in on_enter: {e}")
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    w = ClockWindow()
+    w.show()
+    sys.exit(app.exec_())
