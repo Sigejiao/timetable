@@ -1,9 +1,7 @@
 import dash
-from dash import dcc, html, Input, Output, State, callback_context
+from dash import dcc, html, Input, Output
 import plotly.graph_objects as go
-import plotly.express as px
 from datetime import datetime, timedelta
-import json
 from data_manager import DataManager
 
 # 初始化Dash应用
@@ -77,10 +75,10 @@ app.layout = html.Div([
 
     # 下方左右分栏
     html.Div([
-        # 左侧：详细表格
+        # 左侧：预留区域
         html.Div([
-            html.H3("详细事件列表", style={'textAlign': 'center', 'marginBottom': '10px'}),
-            html.Div(id='detail-list', style={
+            html.H3("左侧区域", style={'textAlign': 'center', 'marginBottom': '10px'}),
+            html.Div(id='left-panel', style={
                 'height': '100%',
                 'overflowY': 'auto',
                 'backgroundColor': '#fff',
@@ -123,15 +121,17 @@ app.layout = html.Div([
     dcc.Store(id='current-selected-date', data=datetime.now().strftime("%Y-%m-%d")),
     dcc.Store(id='all-data', data={}),
     
-    # 右键菜单（暂时隐藏，后续实现）
-    html.Div(id='context-menu', style={'display': 'none'}),
-    
     # 状态栏
     html.Div([
         html.Span("当前选中日期：", id='current-date-display'),
         html.Span(" | "),
         html.Span("数据文件数量：", id='data-count-display')
-    ], style={'textAlign': 'center', 'marginTop': '30px', 'color': '#7f8c8d'})
+    ], style={'textAlign': 'center', 'marginTop': '30px', 'color': '#7f8c8d'}),
+    
+    # 版权信息
+    html.Div([
+        html.Span("copyright@github.com/Sigejiao/")
+    ], style={'textAlign': 'center', 'marginTop': '10px', 'color': '#7f8c8d'})
 ])
 
 def get_recent_dates(days):
@@ -185,7 +185,6 @@ def update_bar_chart(all_data, days):
                 hovertemplate=f"<b>{date}</b><br>暂无数据<extra></extra>"
             ))
         else:
-            used_time = 0
             for i, event in enumerate(events):
                 start_h, start_m, start_s = map(int, event['start_time'].split(':'))
                 end_h, end_m, end_s = map(int, event['end_time'].split(':'))
@@ -193,7 +192,7 @@ def update_bar_chart(all_data, days):
                 end_sec = end_h * 3600 + end_m * 60 + end_s
                 duration = end_sec - start_sec
                 # 对当天，未到达的部分用灰色
-                if is_today and start_sec < now_seconds < end_sec:
+                if is_today and now_seconds is not None and start_sec < now_seconds < end_sec:
                     # 已用部分
                     used = now_seconds - start_sec
                     if used > 0:
@@ -221,7 +220,7 @@ def update_bar_chart(all_data, days):
                             hovertemplate=f"<b>{date}</b><br>未到时间<extra></extra>"
                         ))
                     break
-                elif is_today and end_sec > now_seconds:
+                elif is_today and now_seconds is not None and end_sec > now_seconds:
                     # 整段未到时间
                     fig.add_trace(go.Bar(
                         x=[date],
@@ -282,49 +281,7 @@ def update_bar_chart(all_data, days):
     )
     return fig
 
-# 回调函数：更新详细信息列表
-@app.callback(
-    Output('detail-list', 'children'),
-    [Input('current-selected-date', 'data')]
-)
-def update_detail_list(selected_date):
-    """更新详细事件列表（美化UI）"""
-    if not selected_date:
-        return html.P("请选择一个日期查看详细信息")
-    events = data_manager.parse_time_events(selected_date)
-    if not events:
-        return html.P("（该日期暂无数据）")
-    # 表头
-    header = html.Div([
-        html.Span("时间", style={'fontWeight': 'bold', 'fontSize': '16px', 'color': '#222', 'flex': '1', 'textAlign': 'left'}),
-        html.Span("事件", style={'fontWeight': 'bold', 'fontSize': '16px', 'color': '#222', 'flex': '2', 'textAlign': 'right'})
-    ], style={
-        'display': 'flex',
-        'alignItems': 'center',
-        'padding': '12px 0 8px 0',
-        'borderBottom': '3px solid #bbb',
-        'marginBottom': '8px',
-        'background': '#fafbfc'
-    })
-    # 列表内容
-    event_items = []
-    for i, event in enumerate(events):
-        event_items.append(
-            html.Div([
-                html.Span(f"{event['start_time']} - {event['end_time']}",
-                         style={'fontWeight': '500', 'color': '#222', 'flex': '1', 'textAlign': 'left', 'fontSize': '15px'}),
-                html.Span(event['event'],
-                         style={'color': '#34495e', 'flex': '2', 'textAlign': 'right', 'fontSize': '15px', 'fontWeight': '500'}),
-            ], style={
-                'display': 'flex',
-                'alignItems': 'center',
-                'padding': '18px 0',  # 3倍行间距
-                'backgroundColor': '#f8f9fa' if i % 2 == 0 else 'white',
-                'borderBottom': '1.5px solid #e0e0e0',
-                'fontSize': '15px',
-            })
-        )
-    return [header] + event_items
+
 
 # 回调函数：更新表盘
 @app.callback(
