@@ -295,18 +295,25 @@ def update_detail_list(click_data, selected_date):
 # 回调函数：更新表盘
 @app.callback(
     Output('clock-ring', 'figure'),
-    [Input('current-selected-date', 'data')]
+    [Input('current-selected-date', 'data'),
+     Input('all-data', 'data')]
 )
-def update_clock_ring(selected_date):
+def update_clock_ring(selected_date, all_data):
     """更新表盘环形图"""
     if not selected_date:
         return go.Figure()
+    # 重新获取当天数据，保证刷新
     events = data_manager.parse_time_events(selected_date)
     if not events:
         return go.Figure()
     labels = [event['event'] for event in events]
     values = [event['duration'] for event in events]
     colors = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(events))]
+    total = sum(values)
+    if total < 24:
+        labels.append('未分配')
+        values.append(24 - total)
+        colors.append('#e0e0e0')
     fig = go.Figure(data=[go.Pie(
         labels=labels,
         values=values,
