@@ -1,17 +1,22 @@
-/* 1. 默认全图都是箭头 */
-.js-plotly-plot svg {
-  cursor: default !important;
-}
-
-/* 2. 禁掉所有 overlay drag 矩形 */
-.js-plotly-plot .drag {
+/* 只禁用 zoom 和 select 那两个 overlay rectangle */
+.js-plotly-plot .zoomlayer .zoomrect,
+.js-plotly-plot .selectlayer .selectrect {
   pointer-events: none !important;
-  cursor: default !important;
 }
 
-/* 3. 恢复柱子本身的事件并切手指 */
+/* 柱子悬停手指样式 */
 .js-plotly-plot .barlayer .trace.bars rect,
 .js-plotly-plot .barlayer .trace.bars path {
-  pointer-events: auto !important;
   cursor: pointer !important;
+}
+
+/* 默认全图箭头 */
+.js-plotly-plot svg {
+  cursor: default !important;
 } 
+
+/* 抹掉所有 Plotly 交互模式下的特殊光标，恢复成浏览器默认 */
+.js-plotly-plot .drag {
+    cursor: auto !important;
+  }
+  

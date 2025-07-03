@@ -259,38 +259,46 @@ def update_bar_chart(all_data, days):
 # 回调函数：更新详细信息列表
 @app.callback(
     Output('detail-list', 'children'),
-    [Input('bar-chart', 'clickData'),
-     Input('current-selected-date', 'data')]
+    [Input('current-selected-date', 'data')]
 )
-def update_detail_list(click_data, selected_date):
-    """更新详细事件列表"""
+def update_detail_list(selected_date):
+    """更新详细事件列表（美化UI）"""
     if not selected_date:
         return html.P("请选择一个日期查看详细信息")
-    
     events = data_manager.parse_time_events(selected_date)
-    
     if not events:
         return html.P("该日期暂无数据")
-    
-    # 创建事件列表
+    # 表头
+    header = html.Div([
+        html.Span("时间", style={'fontWeight': 'bold', 'fontSize': '16px', 'color': '#222', 'flex': '1', 'textAlign': 'left'}),
+        html.Span("事件", style={'fontWeight': 'bold', 'fontSize': '16px', 'color': '#222', 'flex': '2', 'textAlign': 'right'})
+    ], style={
+        'display': 'flex',
+        'alignItems': 'center',
+        'padding': '12px 0 8px 0',
+        'borderBottom': '3px solid #bbb',
+        'marginBottom': '8px',
+        'background': '#fafbfc'
+    })
+    # 列表内容
     event_items = []
     for i, event in enumerate(events):
         event_items.append(
             html.Div([
-                html.Span(f"{event['start_time']} - {event['end_time']}", 
-                         style={'fontWeight': 'bold', 'color': '#2c3e50'}),
-                html.Span(" | "),
-                html.Span(event['event'], style={'color': '#34495e'}),
-                html.Span(f" ({event['duration']:.2f}h)", 
-                         style={'color': '#7f8c8d', 'fontSize': '12px'})
+                html.Span(f"{event['start_time']} - {event['end_time']}",
+                         style={'fontWeight': '500', 'color': '#222', 'flex': '1', 'textAlign': 'left', 'fontSize': '15px'}),
+                html.Span(event['event'],
+                         style={'color': '#34495e', 'flex': '2', 'textAlign': 'right', 'fontSize': '15px', 'fontWeight': '500'}),
             ], style={
-                'padding': '8px',
-                'borderBottom': '1px solid #ecf0f1',
-                'backgroundColor': '#f8f9fa' if i % 2 == 0 else 'white'
+                'display': 'flex',
+                'alignItems': 'center',
+                'padding': '18px 0',  # 3倍行间距
+                'backgroundColor': '#f8f9fa' if i % 2 == 0 else 'white',
+                'borderBottom': '1.5px solid #e0e0e0',
+                'fontSize': '15px',
             })
         )
-    
-    return event_items
+    return [header] + event_items
 
 # 回调函数：更新表盘
 @app.callback(
