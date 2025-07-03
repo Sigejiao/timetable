@@ -102,7 +102,7 @@ app.layout = html.Div([
                     id='clock-ring',
                     figure=go.Figure(),
                     config={'displayModeBar': False},
-                    style={'height': '100%'}
+                    style={'height': '100%', 'width': '100%'}
                 )
             ], style={
                 'backgroundColor': '#fff',
@@ -112,7 +112,8 @@ app.layout = html.Div([
                 'margin': '0 8px',
                 'display': 'flex',
                 'flexDirection': 'column',
-                'justifyContent': 'center',
+                'justifyContent': 'center',   # 垂直居中
+                'alignItems': 'center',       # 水平居中
                 'height': '100%',
             })
         ], style={'width': '48%', 'display': 'flex', 'flexDirection': 'column', 'background': 'none', 'boxShadow': 'none', 'marginBottom': '0', 'height': '100%'}),
