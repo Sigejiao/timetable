@@ -311,7 +311,7 @@ def update_clock_ring(selected_date, all_data):
     colors = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(events))]
     total = sum(values)
     if total < 24:
-        labels.append('未分配')
+        labels.append('未来')
         values.append(24 - total)
         colors.append('#e0e0e0')
     fig = go.Figure(data=[go.Pie(
@@ -319,14 +319,25 @@ def update_clock_ring(selected_date, all_data):
         values=values,
         marker=dict(colors=colors),
         hole=0.6,
-        textinfo='label+percent',
-        textposition='inside'
+        textinfo='none',  # 不在内部显示文字
+        textposition='inside',
+        sort=False,
+        direction='clockwise'
     )])
     fig.update_layout(
-        title=f"{selected_date} 时间分布",
+        #title=f"{selected_date} 时间分布",
+        
         height=300,
         margin=dict(l=20, r=20, t=40, b=20),
-        showlegend=False
+        showlegend=True,
+        legend=dict(
+            orientation='v',
+            x=0,
+            y=0.8,  # 向上调整
+            xanchor='left',
+            yanchor='middle',
+            font=dict(size=12)
+        )
     )
     return fig
 
