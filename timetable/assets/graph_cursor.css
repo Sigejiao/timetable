@@ -4,11 +4,16 @@
   pointer-events: none !important;
 }
 
-/* 柱子悬停手指样式 */
-.js-plotly-plot .barlayer .trace.bars rect,
-.js-plotly-plot .barlayer .trace.bars path {
-  cursor: pointer !important;
+/* 隐藏所有滚动条（适用于大多数现代浏览器） */
+::-webkit-scrollbar {
+    width: 0 !important;
+    background: transparent;
 }
+html, body {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE 10+ */
+}
+
 
 /* 默认全图箭头 */
 .js-plotly-plot svg {
@@ -19,4 +24,20 @@
 .js-plotly-plot .drag {
     cursor: auto !important;
   }
-  
+
+/* 1. 先保证所有 Plotly overlay 矩形不拦截事件 */
+.js-plotly-plot .zoomlayer .zoomrect,
+.js-plotly-plot .selectlayer .selectrect {
+  pointer-events: none !important;
+}
+
+/* 2. 针对真正的柱子 path，在 hover 时开 pointer-events 并显示手指 */
+.js-plotly-plot .trace.bars .points .point path:hover {
+  pointer-events: all !important;
+  cursor: pointer !important;
+}
+
+.js-plotly-plot .trace.bars .points .point rect:hover {
+    pointer-events: all !important;
+    cursor: pointer !important;
+  }

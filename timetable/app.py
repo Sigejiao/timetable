@@ -46,13 +46,15 @@ app.layout = html.Div([
     html.Div([
         dcc.Graph(
             id='bar-chart',
+            figure=go.Figure(),  # 初始空图表
             config={
-                'displayModeBar': False  # 不显示任何工具栏按钮
+                'displayModeBar': False,  # 不显示任何工具栏按钮
+                'doubleClick': False     # 禁用双击行为
             },
             style={'height': '500px'}
         ),
         html.Div([
-            html.Label("显示天数："),
+            html.Label("显示天数：", style={'marginRight': '8px', 'fontSize': '16px'}),
             dcc.Dropdown(
                 id='days-dropdown',
                 options=[
@@ -62,9 +64,15 @@ app.layout = html.Div([
                     {'label': '最近30天', 'value': 30}
                 ],
                 value=7,
-                style={'width': '150px', 'display': 'inline-block', 'marginLeft': '10px'}
+                style={'width': '120px', 'display': 'inline-block'}
             )
-        ], style={'textAlign': 'right', 'marginTop': '-40px', 'marginRight': '30px'})
+        ], style={
+            'display': 'flex',
+            'alignItems': 'center',
+            'justifyContent': 'flex-end',
+            'marginTop': '20px',
+            'marginRight': '30px'
+        }),
     ], style={'width': '100%', 'marginBottom': '10px'}),
 
     # 下方左右分栏
@@ -73,25 +81,42 @@ app.layout = html.Div([
         html.Div([
             html.H3("详细事件列表", style={'textAlign': 'center', 'marginBottom': '10px'}),
             html.Div(id='detail-list', style={
-                'height': '320px',
+                'height': '100%',
                 'overflowY': 'auto',
                 'backgroundColor': '#fff',
-                'borderRadius': '8px',
-                'boxShadow': '0 2px 8px #f0f1f2',
-                'padding': '10px'
+                'borderRadius': '12px',
+                'boxShadow': '0 2px 12px #f0f1f2',
+                'padding': '16px',
+                'margin': '0 8px',
+                'display': 'flex',
+                'flexDirection': 'column',
+                'justifyContent': 'flex-start',
             })
-        ], style={'width': '55%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+        ], style={'width': '48%', 'display': 'flex', 'flexDirection': 'column', 'background': 'none', 'boxShadow': 'none', 'marginRight': '2%', 'marginBottom': '0', 'height': '100%'}),
 
         # 右侧：圆环饼状图
         html.Div([
             html.H3("时间分布表盘", style={'textAlign': 'center', 'marginBottom': '10px'}),
-            dcc.Graph(
-                id='clock-ring',
-                config={'displayModeBar': False},
-                style={'height': '320px'}
-            )
-        ], style={'width': '43%', 'display': 'inline-block', 'verticalAlign': 'top', 'marginLeft': '2%'})
-    ], style={'width': '100%', 'marginTop': '10px'}),
+            html.Div([
+                dcc.Graph(
+                    id='clock-ring',
+                    figure=go.Figure(),
+                    config={'displayModeBar': False},
+                    style={'height': '100%'}
+                )
+            ], style={
+                'backgroundColor': '#fff',
+                'borderRadius': '12px',
+                'boxShadow': '0 2px 12px #f0f1f2',
+                'padding': '16px',
+                'margin': '0 8px',
+                'display': 'flex',
+                'flexDirection': 'column',
+                'justifyContent': 'center',
+                'height': '100%',
+            })
+        ], style={'width': '48%', 'display': 'flex', 'flexDirection': 'column', 'background': 'none', 'boxShadow': 'none', 'marginBottom': '0', 'height': '100%'}),
+    ], style={'width': '100%', 'marginTop': '40px', 'padding': '0 10px', 'display': 'flex', 'alignItems': 'stretch', 'height': '480px'}),
 
     # 隐藏的存储组件
     dcc.Store(id='current-selected-date', data=datetime.now().strftime("%Y-%m-%d")),
@@ -144,9 +169,9 @@ def update_bar_chart(all_data, days):
     for date in dates:
         events = data_manager.parse_time_events(date) if date in all_data else []
         is_today = date == datetime.now().strftime('%Y-%m-%d')
-        now = datetime.now().strftime('%H:%M:%S') if is_today else None
         now_seconds = None
         if is_today:
+            now = datetime.now().strftime('%H:%M:%S')
             h, m, s = map(int, now.split(':'))
             now_seconds = h * 3600 + m * 60 + s
         if not events:
@@ -267,7 +292,7 @@ def update_detail_list(selected_date):
         return html.P("请选择一个日期查看详细信息")
     events = data_manager.parse_time_events(selected_date)
     if not events:
-        return html.P("该日期暂无数据")
+        return html.P("（该日期暂无数据）")
     # 表头
     header = html.Div([
         html.Span("时间", style={'fontWeight': 'bold', 'fontSize': '16px', 'color': '#222', 'flex': '1', 'textAlign': 'left'}),
@@ -313,7 +338,23 @@ def update_clock_ring(selected_date, all_data):
     # 重新获取当天数据，保证刷新
     events = data_manager.parse_time_events(selected_date)
     if not events:
-        return go.Figure()
+        # 无数据时显示纯灰色圆环且不显示图例
+        fig = go.Figure(data=[go.Pie(
+            labels=['无数据'],
+            values=[24],
+            marker=dict(colors=['#e0e0e0']),
+            hole=0.6,
+            textinfo='none',
+            sort=False,
+            direction='clockwise',
+            showlegend=False
+        )])
+        fig.update_layout(
+            height=300,
+            margin=dict(l=20, r=20, t=40, b=20),
+            showlegend=False
+        )
+        return fig
     labels = [event['event'] for event in events]
     values = [event['duration'] for event in events]
     colors = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(events))]
