@@ -13,6 +13,30 @@ app.title = "时间管理可视化"
 # 初始化数据管理器
 data_manager = DataManager()
 
+# 统一配色方案，与clock_renderer.py一致
+COLOR_LIST = [
+    '#40DE5A',  # 草绿
+    '#00C17F',  # 翠绿
+    '#00B3A4',  # 青石
+    '#00E3C9',  # 浅碧
+    '#4CBBFF',  # 天蓝
+    '#6A8FFF',  # 薄荷蓝
+    '#9B4CFF',  # 淡紫
+    '#DE1AAD',  # 品红
+    '#FF4C8F',  # 玫瑰
+    '#F7ECB5',  # 柔沙
+    '#E4C07E',  # 小麦
+    '#C49A67',  # 暖驼
+    '#B78B3A',  # 卡其
+    '#A65C2A',  # 棕褐
+    '#DA3A1B',  # 深朱
+    '#FF4F00',  # 朱红
+    '#FF8C1A',  # 橙黄
+    '#FFB800',  # 琥珀
+    '#C4D313',  # 黄绿
+    '#99D84B',  # 青柠
+]
+
 # 应用布局
 app.layout = html.Div([
     # 标题
@@ -22,8 +46,10 @@ app.layout = html.Div([
     html.Div([
         dcc.Graph(
             id='bar-chart',
-            config={'displayModeBar': False},
-            style={'height': '320px'}
+            config={
+                'displayModeBar': False  # 不显示任何工具栏按钮
+            },
+            style={'height': '500px'}
         ),
         html.Div([
             html.Label("显示天数："),
@@ -82,6 +108,10 @@ app.layout = html.Div([
     ], style={'textAlign': 'center', 'marginTop': '30px', 'color': '#7f8c8d'})
 ])
 
+def get_recent_dates(days):
+    today = datetime.now().date()
+    return [(today - timedelta(days=i)).strftime('%Y-%m-%d') for i in reversed(range(days))]
+
 # 回调函数：初始化数据
 @app.callback(
     Output('all-data', 'data'),
@@ -103,49 +133,127 @@ def update_bar_chart(all_data, days):
     if not all_data:
         return go.Figure()
     
-    # 获取最近的日期
-    dates = list(all_data.keys())
-    if days and len(dates) > days:
-        dates = dates[-days:]
+    # 获取最近days天的所有日期
+    dates = get_recent_dates(days)
+    # 横轴标签只显示月-日
+    ticktext = [date[5:] for date in dates]
     
     # 准备图表数据
     fig = go.Figure()
     
     for date in dates:
-        events = data_manager.parse_time_events(date)
+        events = data_manager.parse_time_events(date) if date in all_data else []
+        is_today = date == datetime.now().strftime('%Y-%m-%d')
+        now = datetime.now().strftime('%H:%M:%S') if is_today else None
+        now_seconds = None
+        if is_today:
+            h, m, s = map(int, now.split(':'))
+            now_seconds = h * 3600 + m * 60 + s
         if not events:
-            continue
-        
-        # 为每个事件创建一段柱状图
-        for event in events:
-            start_hour = float(event['start_time'].split(':')[0]) + float(event['start_time'].split(':')[1]) / 60
-            end_hour = float(event['end_time'].split(':')[0]) + float(event['end_time'].split(':')[1]) / 60
-            duration = end_hour - start_hour
-            
             fig.add_trace(go.Bar(
                 x=[date],
-                y=[duration],
-                name=event['event'],
-                base=start_hour,
-                marker_color='lightblue',
+                y=[24],
+                name="无数据",
+                marker_color='#e0e0e0',
                 showlegend=False,
-                hovertemplate=f"<b>{date}</b><br>" +
-                             f"时间: {event['start_time']} - {event['end_time']}<br>" +
-                             f"事件: {event['event']}<br>" +
-                             f"时长: {duration:.2f}小时<extra></extra>"
+                hovertemplate=f"<b>{date}</b><br>暂无数据<extra></extra>"
             ))
-    
+        else:
+            used_time = 0
+            for i, event in enumerate(events):
+                start_h, start_m, start_s = map(int, event['start_time'].split(':'))
+                end_h, end_m, end_s = map(int, event['end_time'].split(':'))
+                start_sec = start_h * 3600 + start_m * 60 + start_s
+                end_sec = end_h * 3600 + end_m * 60 + end_s
+                duration = end_sec - start_sec
+                # 对当天，未到达的部分用灰色
+                if is_today and start_sec < now_seconds < end_sec:
+                    # 已用部分
+                    used = now_seconds - start_sec
+                    if used > 0:
+                        fig.add_trace(go.Bar(
+                            x=[date],
+                            y=[used/3600],
+                            name=event['event'],
+                            base=start_sec/3600,
+                            marker_color=COLOR_LIST[i % len(COLOR_LIST)],
+                            showlegend=False,
+                            hovertemplate=f"<b>{date}</b><br>" +
+                                         f"时间: {event['start_time']} - {now}\n" +
+                                         f"事件: {event['event']}<extra></extra>"
+                        ))
+                    # 未用部分
+                    left = end_sec - now_seconds
+                    if left > 0:
+                        fig.add_trace(go.Bar(
+                            x=[date],
+                            y=[left/3600],
+                            name='未到时间',
+                            base=now_seconds/3600,
+                            marker_color='#e0e0e0',
+                            showlegend=False,
+                            hovertemplate=f"<b>{date}</b><br>未到时间<extra></extra>"
+                        ))
+                    break
+                elif is_today and end_sec > now_seconds:
+                    # 整段未到时间
+                    fig.add_trace(go.Bar(
+                        x=[date],
+                        y=[duration/3600],
+                        name='未到时间',
+                        base=start_sec/3600,
+                        marker_color='#e0e0e0',
+                        showlegend=False,
+                        hovertemplate=f"<b>{date}</b><br>未到时间<extra></extra>"
+                    ))
+                    break
+                else:
+                    # 已过去的事件
+                    fig.add_trace(go.Bar(
+                        x=[date],
+                        y=[duration/3600],
+                        name=event['event'],
+                        base=start_sec/3600,
+                        marker_color=COLOR_LIST[i % len(COLOR_LIST)],
+                        showlegend=False,
+                        hovertemplate=f"<b>{date}</b><br>" +
+                                     f"时间: {event['start_time']} - {event['end_time']}<br>" +
+                                     f"事件: {event['event']}<br>" +
+                                     f"时长: {duration/3600:.2f}小时<extra></extra>"
+                    ))
     # 更新布局
     fig.update_layout(
-        title="每日时间分布",
+        #title="每日时间分布",
         xaxis_title="日期",
         yaxis_title="时间（小时）",
-        yaxis=dict(range=[0, 24]),
+        yaxis=dict(range=[0, 24], showgrid=False, zeroline=False, showline=False, showticklabels=True),
+        xaxis=dict(
+            type='category',
+            categoryorder='category ascending',
+            tickangle=0,
+            tickmode='array',
+            ticktext=ticktext,  # 只显示月-日
+            tickvals=dates,
+            tickfont=dict(size=10 if len(dates) > 7 else 12),
+            showgrid=False, zeroline=False, showline=False, showticklabels=True
+        ),
         barmode='stack',
-        height=400,
-        margin=dict(l=50, r=50, t=50, b=50)
+        height=500,
+        margin=dict(l=20, r=20, t=40, b=20),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        bargap=0.02,
+        bargroupgap=0.01,
+        legend=dict(
+            itemclick=False,
+            itemdoubleclick=False,
+            bgcolor='rgba(0,0,0,0)',  # 透明
+            bordercolor='rgba(0,0,0,0)'
+        ),
+        dragmode=False,
+        title_font=dict(size=18, color='#222'),
+        font=dict(color='#222', size=12)
     )
-    
     return fig
 
 # 回调函数：更新详细信息列表
@@ -193,30 +301,26 @@ def update_clock_ring(selected_date):
     """更新表盘环形图"""
     if not selected_date:
         return go.Figure()
-    
     events = data_manager.parse_time_events(selected_date)
-    
     if not events:
         return go.Figure()
-    
-    # 准备饼图数据
     labels = [event['event'] for event in events]
     values = [event['duration'] for event in events]
-    
+    colors = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(events))]
     fig = go.Figure(data=[go.Pie(
         labels=labels,
         values=values,
-        hole=0.6,  # 创建环形图
+        marker=dict(colors=colors),
+        hole=0.6,
         textinfo='label+percent',
         textposition='inside'
     )])
-    
     fig.update_layout(
         title=f"{selected_date} 时间分布",
         height=300,
-        margin=dict(l=20, r=20, t=40, b=20)
+        margin=dict(l=20, r=20, t=40, b=20),
+        showlegend=False
     )
-    
     return fig
 
 # 回调函数：处理柱状图点击

@@ -1,0 +1,17 @@
+/* 1. 默认全图都是箭头 */
+.js-plotly-plot svg {
+  cursor: default !important;
+}
+
+/* 2. 禁掉所有 overlay drag 矩形 */
+.js-plotly-plot .drag {
+  pointer-events: none !important;
+  cursor: default !important;
+}
+
+/* 3. 恢复柱子本身的事件并切手指 */
+.js-plotly-plot .barlayer .trace.bars rect,
+.js-plotly-plot .barlayer .trace.bars path {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+} 

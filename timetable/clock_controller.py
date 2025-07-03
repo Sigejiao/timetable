@@ -129,13 +129,17 @@ class ClockController:
     
     def add_event(self, event_name):
         """添加新事件"""
-        if event_name.strip():
-            now = datetime.datetime.now().strftime("%H:%M:%S")
-            self.anchors.append({"time": now, "event": event_name.strip()})
-            self.save_anchors()
-            self.precompute_anchor_data()
-            return True
-        return False
+        # 如果输入为空或只包含空白字符，使用"未命名"作为默认名称
+        if not event_name or not event_name.strip():
+            event_name = "未命名"
+        else:
+            event_name = event_name.strip()
+        
+        now = datetime.datetime.now().strftime("%H:%M:%S")
+        self.anchors.append({"time": now, "event": event_name})
+        self.save_anchors()
+        self.precompute_anchor_data()
+        return True
     
     def get_current_segment_index(self):
         """获取当前时间段的索引"""
