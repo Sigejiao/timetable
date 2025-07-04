@@ -142,8 +142,11 @@ class DataManager:
             if i + 1 < len(raw_data):
                 end_time = raw_data[i + 1]['time']
             else:
-                # 最后一个事件，结束时间设为 24:00:00
-                end_time = "24:00:00"
+                # 如果是今天，结束时间为当前时间，否则为23:59:59
+                if date == datetime.now().strftime("%Y-%m-%d"):
+                    end_time = datetime.now().strftime("%H:%M:%S")
+                else:
+                    end_time = "23:59:59"
             
             events.append({
                 'start_time': start_time,
@@ -168,10 +171,6 @@ class DataManager:
         try:
             start = datetime.strptime(start_time, "%H:%M:%S")
             end = datetime.strptime(end_time, "%H:%M:%S")
-            
-            # 如果结束时间小于开始时间，说明跨天了
-            if end < start:
-                end = datetime.strptime("24:00:00", "%H:%M:%S")
             
             duration = end - start
             return duration.total_seconds() / 3600  # 转换为小时

@@ -120,6 +120,8 @@ app.layout = html.Div([
     # 隐藏的存储组件
     dcc.Store(id='current-selected-date', data=datetime.now().strftime("%Y-%m-%d")),
     dcc.Store(id='all-data', data={}),
+    # 新增定时器组件，每10分钟刷新一次（600,000毫秒）
+    dcc.Interval(id='clock-refresh', interval=600000, n_intervals=0),
     
     # 状态栏
     html.Div([
@@ -251,7 +253,15 @@ def update_bar_chart(all_data, days):
         #title="每日时间分布",
         xaxis_title="日期",
         yaxis_title="时间（小时）",
-        yaxis=dict(range=[0, 24], showgrid=False, zeroline=False, showline=False, showticklabels=True),
+        yaxis=dict(
+            range=[0, 24],
+            showgrid=False,
+            zeroline=False,
+            showline=False,
+            showticklabels=True,
+            tickvals=[0, 5, 10, 15, 20, 24],      # 手动指定刻度
+            ticktext=['0', '5', '10', '15', '20', '24']  # 手动指定标签
+        ),
         xaxis=dict(
             type='category',
             categoryorder='category ascending',
@@ -287,10 +297,12 @@ def update_bar_chart(all_data, days):
 @app.callback(
     Output('clock-ring', 'figure'),
     [Input('current-selected-date', 'data'),
-     Input('all-data', 'data')]
+     Input('all-data', 'data'),
+     Input('clock-refresh', 'n_intervals')]
 )
-def update_clock_ring(selected_date, all_data):
+def update_clock_ring(selected_date, all_data, n_intervals):
     """更新表盘环形图"""
+    from datetime import datetime, timedelta
     if not selected_date:
         return go.Figure()
     # 重新获取当天数据，保证刷新
@@ -317,10 +329,20 @@ def update_clock_ring(selected_date, all_data):
     values = [event['duration'] for event in events]
     colors = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(events))]
     total = sum(values)
-    if total < 24:
-        labels.append('未来')
-        values.append(24 - total)
-        colors.append('#e0e0e0')
+    # 判断是否需要“未来”灰色
+    now = datetime.now()
+    try:
+        selected_date_obj = datetime.strptime(selected_date, "%Y-%m-%d")
+    except Exception:
+        selected_date_obj = now
+    day_end = selected_date_obj + timedelta(days=1)
+    if now < day_end:
+        # 还没到24:00，才画“未来”灰色
+        if total < 24:
+            labels.append('未来')
+            values.append(24 - total)
+            colors.append('#e0e0e0')
+    # 否则（已经过了24:00），不画“未来”，最后一段事件自动画满
     fig = go.Figure(data=[go.Pie(
         labels=labels,
         values=values,
@@ -333,7 +355,6 @@ def update_clock_ring(selected_date, all_data):
     )])
     fig.update_layout(
         #title=f"{selected_date} 时间分布",
-        
         height=300,
         margin=dict(l=20, r=20, t=40, b=20),
         showlegend=True,
