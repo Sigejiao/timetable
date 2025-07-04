@@ -42,35 +42,46 @@ app.layout = html.Div([
 
     # 柱状图（单独一行）
     html.Div([
-        dcc.Graph(
-            id='bar-chart',
-            figure=go.Figure(),  # 初始空图表
-            config={
-                'displayModeBar': False,  # 不显示任何工具栏按钮
-                'doubleClick': False     # 禁用双击行为
-            },
-            style={'height': '500px'}
-        ),
         html.Div([
-            html.Label("显示天数：", style={'marginRight': '8px', 'fontSize': '16px'}),
-            dcc.Dropdown(
-                id='days-dropdown',
-                options=[
-                    {'label': '最近3天', 'value': 3},
-                    {'label': '最近7天', 'value': 7},
-                    {'label': '最近14天', 'value': 14},
-                    {'label': '最近30天', 'value': 30}
-                ],
-                value=7,
-                style={'width': '120px', 'display': 'inline-block'}
-            )
+            dcc.Graph(
+                id='bar-chart',
+                figure=go.Figure(),  # 初始空图表
+                config={
+                    'displayModeBar': False,  # 不显示任何工具栏按钮
+                    'doubleClick': False     # 禁用双击行为
+                },
+                style={'height': '500px'}
+            ),
+            html.Div([
+                html.Label("显示天数：", style={'marginRight': '8px', 'fontSize': '16px'}),
+                dcc.Dropdown(
+                    id='days-dropdown',
+                    options=[
+                        {'label': '最近3天', 'value': 3},
+                        {'label': '最近7天', 'value': 7},
+                        {'label': '最近14天', 'value': 14},
+                        {'label': '最近30天', 'value': 30}
+                    ],
+                    value=7,
+                    style={'width': '120px', 'display': 'inline-block'}
+                )
+            ], style={
+                'display': 'flex',
+                'alignItems': 'center',
+                'justifyContent': 'flex-end',
+                'marginTop': '20px',
+                'marginRight': '30px'
+            }),
         ], style={
+            'backgroundColor': '#fff',
+            'borderRadius': '12px',
+            'boxShadow': '0 2px 12px #f0f1f2',
+            'padding': '16px',
+            'margin': '0 18px',
             'display': 'flex',
-            'alignItems': 'center',
-            'justifyContent': 'flex-end',
-            'marginTop': '20px',
-            'marginRight': '30px'
-        }),
+            'flexDirection': 'column',
+            'justifyContent': 'flex-start',
+        })
     ], style={'width': '100%', 'marginBottom': '10px'}),
 
     # 下方左右分栏
