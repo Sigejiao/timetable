@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, dash_table, State, callback_context
+from dash import dcc, html, Input, Output, dash_table, State, callback_context, ALL
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from data_manager import DataManager
@@ -132,7 +132,9 @@ app.layout = html.Div([
                     id='schedule-table',
                     columns=[
                         {'name': '+', 'id': 'add-row', 'presentation': 'markdown'},
-                        {'name': '开始时间', 'id': 'start_time', 'editable': True},
+                        {'name': '时', 'id': 'start_hour', 'editable': True, 'presentation': 'dropdown'},
+                        {'name': '分', 'id': 'start_minute', 'editable': True, 'presentation': 'dropdown'},
+                        {'name': '秒', 'id': 'start_second', 'editable': True, 'presentation': 'dropdown'},
                         {'name': '结束时间', 'id': 'end_time', 'editable': False},
                         {'name': '颜色示例', 'id': 'color', 'editable': False, 'presentation': 'markdown'},
                         {'name': '事件名称', 'id': 'event', 'editable': True},
@@ -176,6 +178,20 @@ app.layout = html.Div([
                         'border': 'none',
                         'background': 'none',
                     },
+                    dropdown={
+                        'start_hour': {
+                            'clearable': False,
+                            'options': [{'label': f"{h:02d}", 'value': f"{h:02d}"} for h in range(24)]
+                        },
+                        'start_minute': {
+                            'clearable': False,
+                            'options': [{'label': f"{m:02d}", 'value': f"{m:02d}"} for m in range(60)]
+                        },
+                        'start_second': {
+                            'clearable': False,
+                            'options': [{'label': f"{s:02d}", 'value': f"{s:02d}"} for s in range(60)]
+                        }
+                    }
 
                 )
             ], style={
@@ -587,13 +603,29 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
             except ValueError:
                 duration = 0.0
         
+        # 拆分时间字符串为时、分、秒
+        start_hour = '00'
+        start_minute = '00'
+        start_second = '00'
+        if start_time:
+            try:
+                time_parts = start_time.split(':')
+                if len(time_parts) == 3:
+                    start_hour = time_parts[0]
+                    start_minute = time_parts[1]
+                    start_second = time_parts[2]
+            except:
+                pass
+        
         # 生成颜色示例：使用HTML色块，颜色与柱状图和饼状图一致
         color_hex = COLOR_LIST[index % len(COLOR_LIST)]
         color_block = f'<div style="background-color: {color_hex}; width: 20px; height: 20px; border-radius: 3px; display: inline-block;"></div>'
         
         return {
             'add-row': '**+**',
-            'start_time': start_time,
+            'start_hour': start_hour,
+            'start_minute': start_minute,
+            'start_second': start_second,
             'end_time': end_time,
             'color': color_block,
             'event': e.get('event', ''),
@@ -619,12 +651,25 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
         for row in edited_data:
             if not row.get('event'):
                 row['event'] = '未命名'
+            
+            # 合并时、分、秒为完整时间字符串
+            hh = row.get('start_hour', '00') or '00'
+            mm = row.get('start_minute', '00') or '00'
+            ss = row.get('start_second', '00') or '00'
+            start_time = f"{hh}:{mm}:{ss}"
+            
+            # 验证时间格式
+            try:
+                datetime.strptime(start_time, "%H:%M:%S")
+            except ValueError:
+                # 如果时间格式无效，使用默认值
+                start_time = "00:00:00"
         
         # 根据排序方式决定保存时的排序
         if sort_method == 'start_time':
             # 按时间排序保存
             save_data = [
-                {'time': row['start_time'], 'event': row['event']} for row in edited_data
+                {'time': f"{row.get('start_hour', '00') or '00'}:{row.get('start_minute', '00') or '00'}:{row.get('start_second', '00') or '00'}", 'event': row['event']} for row in edited_data
             ]
             data_manager.save_day_data(current_date, save_data)
             # 重新加载，保证时间顺序
@@ -633,7 +678,7 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
         else:
             # 按事件名称排序时，不重新排序保存，保持用户当前的顺序
             save_data = [
-                {'time': row['start_time'], 'event': row['event']} for row in edited_data
+                {'time': f"{row.get('start_hour', '00') or '00'}:{row.get('start_minute', '00') or '00'}:{row.get('start_second', '00') or '00'}", 'event': row['event']} for row in edited_data
             ]
             data_manager.save_day_data(current_date, save_data)
             # 重新加载，但按事件名称排序
@@ -655,21 +700,43 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
             # 插入新行
             if row < len(current_data):
                 # 计算新行的开始时间：被点击行的开始时间+1秒
-                clicked_start_time = current_data[row]['start_time']
+                clicked_hour = current_data[row].get('start_hour', '00')
+                clicked_minute = current_data[row].get('start_minute', '00')
+                clicked_second = current_data[row].get('start_second', '00')
+                
                 new_start_time = ''
-                if clicked_start_time:
+                if clicked_hour and clicked_minute and clicked_second:
                     try:
                         # 解析时间并加1秒
-                        time_obj = datetime.strptime(clicked_start_time, "%H:%M:%S")
+                        time_str = f"{clicked_hour}:{clicked_minute}:{clicked_second}"
+                        time_obj = datetime.strptime(time_str, "%H:%M:%S")
                         new_time_obj = time_obj + timedelta(seconds=1)
                         new_start_time = new_time_obj.strftime("%H:%M:%S")
                     except ValueError:
-                        new_start_time = clicked_start_time  # 如果解析失败，使用原时间
+                        new_start_time = "00:00:00"  # 如果解析失败，使用默认时间
+                else:
+                    new_start_time = "00:00:00"
+                
+                # 拆分新时间为时、分、秒
+                new_hour = '00'
+                new_minute = '00'
+                new_second = '00'
+                if new_start_time:
+                    try:
+                        time_parts = new_start_time.split(':')
+                        if len(time_parts) == 3:
+                            new_hour = time_parts[0]
+                            new_minute = time_parts[1]
+                            new_second = time_parts[2]
+                    except:
+                        pass
                 
                 # 在指定行后插入新行
                 new_row = {
                     'add-row': '**+**',
-                    'start_time': new_start_time,
+                    'start_hour': new_hour,
+                    'start_minute': new_minute,
+                    'start_second': new_second,
                     'end_time': '',
                     'color': '',
                     'event': f"{current_data[row]['event']}2",
@@ -679,7 +746,7 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
                 current_data.insert(row + 1, new_row)
                 # 保存到data_manager
                 save_data = [
-                    {'time': r['start_time'], 'event': r['event']} for r in current_data
+                    {'time': f"{r.get('start_hour', '00') or '00'}:{r.get('start_minute', '00') or '00'}:{r.get('start_second', '00') or '00'}", 'event': r['event']} for r in current_data
                 ]
                 data_manager.save_day_data(current_date, save_data)
                 # 重新加载数据，根据排序方式处理
@@ -696,7 +763,7 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
                 current_data.pop(row)
                 # 保存到data_manager
                 save_data = [
-                    {'time': r['start_time'], 'event': r['event']} for r in current_data
+                    {'time': f"{r.get('start_hour', '00') or '00'}:{r.get('start_minute', '00') or '00'}:{r.get('start_second', '00') or '00'}", 'event': r['event']} for r in current_data
                 ]
                 data_manager.save_day_data(current_date, save_data)
                 # 重新加载数据，根据排序方式处理
