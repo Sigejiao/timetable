@@ -123,7 +123,12 @@ app.layout = html.Div([
                         'background': 'none',
                         'textAlign': 'left',
                     },
-                    style_cell_conditional=[],
+                    style_data_conditional=[
+                        {'if': {'state': 'active'}, 'backgroundColor': 'transparent', 'border': 'none'},
+                        {'if': {'state': 'selected'}, 'backgroundColor': 'transparent', 'border': 'none'},
+                        {'if': {'column_id': 'add-row'}, 'cursor': 'pointer'},
+                        {'if': {'column_id': 'delete-row'}, 'cursor': 'pointer'}
+                    ],
                     style_header={
                         'backgroundColor': '#f8f9fa',
                         'fontWeight': 'bold',
@@ -134,15 +139,11 @@ app.layout = html.Div([
                         'border': 'none',
                         'background': 'none',
                     },
-                    style_data_conditional=[
-                        {'if': {'state': 'active'}, 'backgroundColor': 'transparent', 'border': 'none'},
-                        {'if': {'column_id': 'add-row'}, 'cursor': 'pointer'},
-                        {'if': {'column_id': 'delete-row'}, 'cursor': 'pointer'}
-                    ],
+
                 )
             ], style={
                 'height': '100%',
-                'overflowY': 'auto',
+                'overflowY': 'hidden',
                 'backgroundColor': '#fff',
                 'borderRadius': '12px',
                 'boxShadow': '0 2px 12px #f0f1f2',
@@ -472,13 +473,14 @@ def update_status_bar(selected_date, all_data):
 
 # 合并表格数据加载、自动保存与按钮操作回调
 @app.callback(
-    Output('schedule-table', 'data'),
-    [Input('current-selected-date', 'data'),
-     Input('schedule-table', 'data'),
-     Input('schedule-table', 'active_cell'),
-     Input('schedule-sort-dropdown', 'value')],
-    State('schedule-table', 'data'),
-    State('current-selected-date', 'data')
+    [Output('schedule-table','data'),
+     Output('schedule-table','active_cell')],
+    Input('current-selected-date','data'),
+    Input('schedule-table','data'),
+    Input('schedule-table','active_cell'),
+    Input('schedule-sort-dropdown','value'),
+    State('schedule-table','data'),
+    State('current-selected-date','data'),
 )
 def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort_method, current_data, current_date):
     ctx = callback_context
@@ -532,7 +534,7 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
         # 如果sort_method == 'start_time'，保持原有顺序（按时间排序）
         
         table_data = [fill_row(e, i, events) for i, e in enumerate(events)]
-        return table_data
+        return table_data, active_cell
     elif triggered == 'schedule-table' and 'data' in ctx.triggered[0]['prop_id']:
         # 表格被编辑，自动保存
         for row in edited_data:
@@ -558,11 +560,12 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
             events = data_manager.parse_time_events(current_date)
             events = sorted(events, key=lambda x: x.get('event', ''))
         
-        return [fill_row(e, i, events) for i, e in enumerate(events)]
+        # 编辑操作时保持active_cell不变，这样编辑功能可以正常工作
+        return [fill_row(e, i, events) for i, e in enumerate(events)], active_cell
     elif triggered == 'schedule-table' and 'active_cell' in ctx.triggered[0]['prop_id']:
         # 按钮操作
         if not active_cell or not current_data:
-            return current_data
+            return current_data, active_cell
         
         row = active_cell['row']
         column = active_cell['column_id']
@@ -602,7 +605,8 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
                 events = data_manager.parse_time_events(current_date)
                 if sort_method == 'event':
                     events = sorted(events, key=lambda x: x.get('event', ''))
-                return [fill_row(e, i, events) for i, e in enumerate(events)]
+                # 只有按钮操作才重置active_cell
+                return [fill_row(e, i, events) for i, e in enumerate(events)], None
         
         elif column == 'delete-row':
             # 删除行
@@ -617,12 +621,14 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
                 events = data_manager.parse_time_events(current_date)
                 if sort_method == 'event':
                     events = sorted(events, key=lambda x: x.get('event', ''))
-                return [fill_row(e, i, events) for i, e in enumerate(events)]
+                # 只有按钮操作才重置active_cell
+                return [fill_row(e, i, events) for i, e in enumerate(events)], None
         
-        return current_data
+        # 其他单元格点击保持active_cell不变
+        return current_data, active_cell
     else:
         # 默认返回当前数据
-        return current_data
+        return current_data, active_cell
 
 # 运行应用
 if __name__ == '__main__':
