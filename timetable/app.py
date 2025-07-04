@@ -471,15 +471,16 @@ def update_status_bar(selected_date, all_data):
     count_display = f"数据文件数量：{len(all_data) if all_data else 0}"
     return date_display, count_display
 
-# 合并表格数据加载与自动保存回调
+# 合并表格数据加载、自动保存与按钮操作回调
 @app.callback(
     Output('schedule-table', 'data'),
     [Input('current-selected-date', 'data'),
-     Input('schedule-table', 'data')],
+     Input('schedule-table', 'data'),
+     Input('schedule-table', 'active_cell')],
     State('schedule-table', 'data'),
     State('current-selected-date', 'data')
 )
-def update_and_save_schedule(selected_date, edited_data, current_data, current_date):
+def update_save_and_handle_buttons(selected_date, edited_data, active_cell, current_data, current_date):
     ctx = callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
 
@@ -511,13 +512,13 @@ def update_and_save_schedule(selected_date, edited_data, current_data, current_d
         color_block = f'<div style="background-color: {color_hex}; width: 20px; height: 20px; border-radius: 3px; display: inline-block;"></div>'
         
         return {
-            'add-row': '',
+            'add-row': '**+**',
             'start_time': start_time,
             'end_time': end_time,
             'color': color_block,
             'event': e.get('event', ''),
             'duration': f"{duration:.1f}",
-            'delete-row': ''
+            'delete-row': '**×**'
         }
 
     if triggered == 'current-selected-date':
@@ -525,7 +526,7 @@ def update_and_save_schedule(selected_date, edited_data, current_data, current_d
         events = data_manager.parse_time_events(selected_date)
         table_data = [fill_row(e, i, events) for i, e in enumerate(events)]
         return table_data
-    elif triggered == 'schedule-table':
+    elif triggered == 'schedule-table' and 'data' in ctx.triggered[0]['prop_id']:
         # 表格被编辑，自动保存
         for row in edited_data:
             if not row.get('event'):
@@ -537,6 +538,51 @@ def update_and_save_schedule(selected_date, edited_data, current_data, current_d
         # 重新加载，保证顺序
         events = data_manager.parse_time_events(current_date)
         return [fill_row(e, i, events) for i, e in enumerate(events)]
+    elif triggered == 'schedule-table' and 'active_cell' in ctx.triggered[0]['prop_id']:
+        # 按钮操作
+        if not active_cell or not current_data:
+            return current_data
+        
+        row = active_cell['row']
+        column = active_cell['column_id']
+        
+        if column == 'add-row':
+            # 插入新行
+            if row < len(current_data):
+                # 在指定行后插入新行
+                new_row = {
+                    'add-row': '**+**',
+                    'start_time': '',
+                    'end_time': '',
+                    'color': '',
+                    'event': '',
+                    'duration': '0.0',
+                    'delete-row': '**×**'
+                }
+                current_data.insert(row + 1, new_row)
+                # 保存到data_manager
+                save_data = [
+                    {'time': r['start_time'], 'event': r['event']} for r in current_data
+                ]
+                data_manager.save_day_data(current_date, save_data)
+                # 重新加载数据
+                events = data_manager.parse_time_events(current_date)
+                return [fill_row(e, i, events) for i, e in enumerate(events)]
+        
+        elif column == 'delete-row':
+            # 删除行
+            if len(current_data) > 1:  # 至少保留一行
+                current_data.pop(row)
+                # 保存到data_manager
+                save_data = [
+                    {'time': r['start_time'], 'event': r['event']} for r in current_data
+                ]
+                data_manager.save_day_data(current_date, save_data)
+                # 重新加载数据
+                events = data_manager.parse_time_events(current_date)
+                return [fill_row(e, i, events) for i, e in enumerate(events)]
+        
+        return current_data
     else:
         # 默认返回当前数据
         return current_data
