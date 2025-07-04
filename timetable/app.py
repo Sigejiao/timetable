@@ -140,6 +140,9 @@ app.layout = html.Div([
                         'border': 'none',
                         'background': 'none',
                     },
+                    style_data_conditional=[
+                        {'if': {'state': 'active'}, 'backgroundColor': 'transparent', 'border': 'none'}
+                    ],
                 )
             ], style={
                 'height': '100%',
