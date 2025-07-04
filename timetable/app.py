@@ -100,12 +100,13 @@ app.layout = html.Div([
                         {'name': '+', 'id': 'add-row', 'presentation': 'markdown'},
                         {'name': '开始时间', 'id': 'start_time', 'editable': True},
                         {'name': '结束时间', 'id': 'end_time', 'editable': False},
-                        {'name': '颜色示例', 'id': 'color', 'editable': False},
+                        {'name': '颜色示例', 'id': 'color', 'editable': False, 'presentation': 'markdown'},
                         {'name': '事件名称', 'id': 'event', 'editable': True},
                         {'name': '时长', 'id': 'duration', 'editable': False},
                         {'name': 'x', 'id': 'delete-row', 'presentation': 'markdown'},
                     ],
                     data=[],
+                    markdown_options={'html': True},
                     style_table={
                         'width': '98%',
                         'marginLeft': '1%',
@@ -124,8 +125,9 @@ app.layout = html.Div([
                     style_cell_conditional=[
                         {'if': {'column_id': 'start_time'}, 'textAlign': 'left'},
                         {'if': {'column_id': 'add-row'}, 'textAlign': 'left'},
+                        {'if': {'column_id': 'end_time'}, 'textAlign': 'left'},
+                        {'if': {'column_id': 'color'}, 'textAlign': 'left'},
                         {'if': {'column_id': 'event'}, 'textAlign': 'left'},
-                        {'if': {'column_id': 'end_time'}, 'textAlign': 'right'},
                         {'if': {'column_id': 'duration'}, 'textAlign': 'right'},
                         {'if': {'column_id': 'delete-row'}, 'textAlign': 'right'},
                     ],
@@ -492,13 +494,29 @@ def update_and_save_schedule(selected_date, edited_data, current_data, current_d
             else:
                 end_time = "23:59:59"
         
+        # 计算时长：结束时间 - 开始时间，单位为小时，精确到十分位
+        start_time = e.get('start_time', e.get('time', ''))
+        duration = 0.0
+        if start_time and end_time:
+            try:
+                start = datetime.strptime(start_time, "%H:%M:%S")
+                end = datetime.strptime(end_time, "%H:%M:%S")
+                duration = (end - start).total_seconds() / 3600
+                duration = round(duration, 1)  # 精确到十分位
+            except ValueError:
+                duration = 0.0
+        
+        # 生成颜色示例：使用HTML色块，颜色与柱状图和饼状图一致
+        color_hex = COLOR_LIST[index % len(COLOR_LIST)]
+        color_block = f'<div style="background-color: {color_hex}; width: 20px; height: 20px; border-radius: 3px; display: inline-block;"></div>'
+        
         return {
             'add-row': '',
-            'start_time': e.get('start_time', e.get('time', '')),
+            'start_time': start_time,
             'end_time': end_time,
-            'color': '',
+            'color': color_block,
             'event': e.get('event', ''),
-            'duration': '',
+            'duration': f"{duration:.1f}",
             'delete-row': ''
         }
 
