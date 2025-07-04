@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output
+from dash import dcc, html, Input, Output, dash_table
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from data_manager import DataManager
@@ -78,7 +78,47 @@ app.layout = html.Div([
         # 左侧：预留区域
         html.Div([
             html.H3("左侧区域", style={'textAlign': 'center', 'marginBottom': '10px'}),
-            html.Div(id='left-panel', style={
+            html.Div(id='left-panel', children=[
+                # 新增空表格
+                dash_table.DataTable(
+                    id='schedule-table',
+                    columns=[
+                        {'name': '+', 'id': 'add-row', 'presentation': 'markdown'},
+                        {'name': '开始时间', 'id': 'start_time', 'editable': True},
+                        {'name': '结束时间', 'id': 'end_time', 'editable': False},
+                        {'name': '颜色示例', 'id': 'color', 'editable': False},
+                        {'name': '事件名称', 'id': 'event', 'editable': True},
+                        {'name': '时长', 'id': 'duration', 'editable': False},
+                        {'name': 'x', 'id': 'delete-row', 'presentation': 'markdown'},
+                    ],
+                    data=[],
+                    style_table={
+                        'width': '98%',
+                        'marginLeft': '1%',
+                        'marginRight': '1%',
+                        'maxHeight': '400px',
+                        'overflowY': 'auto',
+                        'border': 'none',
+                        'background': 'none',
+                    },
+                    style_cell={
+                        'padding': '4px 6px',
+                        'fontSize': '14px',
+                        'textAlign': 'left',
+                        'border': 'none',
+                        'background': 'none',
+                    },
+                    style_header={
+                        'backgroundColor': '#f8f9fa',
+                        'fontWeight': 'bold',
+                        'border': 'none',
+                    },
+                    style_data={
+                        'border': 'none',
+                        'background': 'none',
+                    },
+                )
+            ], style={
                 'height': '100%',
                 'overflowY': 'auto',
                 'backgroundColor': '#fff',
