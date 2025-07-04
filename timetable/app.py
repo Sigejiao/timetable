@@ -38,7 +38,14 @@ COLOR_LIST = [
 # 应用布局
 app.layout = html.Div([
     # 标题
-    html.H1("时间管理可视化", style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '30px'}),
+    html.H1("时间管理可视化", style={
+        'textAlign': 'center', 
+        'color': '#2d3748', 
+        'marginBottom': '30px',
+        'fontWeight': '600',
+        'fontSize': '32px',
+        'textShadow': '0 2px 4px rgba(0,0,0,0.1)'
+    }),
 
     # 柱状图（单独一行）
     html.Div([
@@ -53,7 +60,12 @@ app.layout = html.Div([
                 style={'height': '500px'}
             ),
             html.Div([
-                html.Label("显示天数：", style={'marginRight': '8px', 'fontSize': '16px'}),
+                html.Label("显示天数：", style={
+                    'marginRight': '8px', 
+                    'fontSize': '16px',
+                    'fontWeight': '500',
+                    'color': '#4a5568'
+                }),
                 dcc.Dropdown(
                     id='days-dropdown',
                     options=[
@@ -74,13 +86,14 @@ app.layout = html.Div([
             }),
         ], style={
             'backgroundColor': '#fff',
-            'borderRadius': '12px',
-            'boxShadow': '0 2px 12px #f0f1f2',
-            'padding': '16px',
+            'borderRadius': '16px',
+            'boxShadow': '0 8px 32px rgba(0,0,0,0.1)',
+            'padding': '20px',
             'margin': '0 18px',
             'display': 'flex',
             'flexDirection': 'column',
             'justifyContent': 'flex-start',
+            'border': '1px solid rgba(255,255,255,0.2)'
         })
     ], style={'width': '100%', 'marginBottom': '10px'}),
 
@@ -88,11 +101,21 @@ app.layout = html.Div([
     html.Div([
         # 左侧：预留区域
         html.Div([
-            html.H3("左侧区域", style={'textAlign': 'center', 'marginBottom': '10px'}),
+            html.H3("时间安排表", style={
+                'textAlign': 'center', 
+                'marginBottom': '20px',
+                'color': '#2d3748',
+                'fontWeight': '600',
+                'fontSize': '20px'
+            }),
             html.Div(id='left-panel', children=[
                 # 排序方式选择器
                 html.Div([
-                    html.Label('排序方式：', style={'fontWeight': 'bold', 'marginRight': '8px'}),
+                    html.Label('排序方式：', style={
+                        'fontWeight': '600', 
+                        'marginRight': '8px',
+                        'color': '#4a5568'
+                    }),
                     dcc.Dropdown(
                         id='schedule-sort-dropdown',
                         options=[
@@ -103,7 +126,7 @@ app.layout = html.Div([
                         clearable=False,
                         style={'width': '140px', 'display': 'inline-block'}
                     )
-                ], style={'marginBottom': '10px', 'display': 'flex', 'alignItems': 'center'}),
+                ], style={'marginBottom': '15px', 'display': 'flex', 'alignItems': 'center'}),
                 # 新增空表格
                 dash_table.DataTable(
                     id='schedule-table',
@@ -128,23 +151,26 @@ app.layout = html.Div([
                         'background': 'none',
                     },
                     style_cell={
-                        'padding': '4px 6px',
+                        'padding': '8px 12px',
                         'fontSize': '14px',
                         'border': 'none',
                         'background': 'none',
                         'textAlign': 'left',
+                        'color': '#2d3748'
                     },
                     style_data_conditional=[
-                        {'if': {'state': 'active'}, 'backgroundColor': 'transparent', 'border': 'none'},
-                        {'if': {'state': 'selected'}, 'backgroundColor': 'transparent', 'border': 'none'},
+                        {'if': {'state': 'active'}, 'backgroundColor': 'rgba(102, 126, 234, 0.1)', 'border': 'none'},
+                        {'if': {'state': 'selected'}, 'backgroundColor': 'rgba(102, 126, 234, 0.15)', 'border': 'none'},
                         {'if': {'column_id': 'add-row'}, 'cursor': 'pointer'},
                         {'if': {'column_id': 'delete-row'}, 'cursor': 'pointer'}
                     ],
                     style_header={
-                        'backgroundColor': '#f8f9fa',
-                        'fontWeight': 'bold',
+                        'backgroundColor': 'rgba(102, 126, 234, 0.1)',
+                        'fontWeight': '600',
                         'border': 'none',
                         'textAlign': 'left',
+                        'color': '#2d3748',
+                        'padding': '12px'
                     },
                     style_data={
                         'border': 'none',
@@ -156,19 +182,26 @@ app.layout = html.Div([
                 'height': '100%',
                 'overflowY': 'hidden',
                 'backgroundColor': '#fff',
-                'borderRadius': '12px',
-                'boxShadow': '0 2px 12px #f0f1f2',
-                'padding': '16px',
+                'borderRadius': '16px',
+                'boxShadow': '0 8px 32px rgba(0,0,0,0.1)',
+                'padding': '20px',
                 'margin': '0 8px',
                 'display': 'flex',
                 'flexDirection': 'column',
                 'justifyContent': 'flex-start',
+                'border': '1px solid rgba(255,255,255,0.2)'
             })
         ], style={'width': '48%', 'display': 'flex', 'flexDirection': 'column', 'background': 'none', 'boxShadow': 'none', 'marginRight': '2%', 'marginBottom': '0', 'height': '100%'}),
 
         # 右侧：圆环饼状图
         html.Div([
-            html.H3("时间分布表盘", style={'textAlign': 'center', 'marginBottom': '10px'}),
+            html.H3("时间分布表盘", style={
+                'textAlign': 'center', 
+                'marginBottom': '20px',
+                'color': '#2d3748',
+                'fontWeight': '600',
+                'fontSize': '20px'
+            }),
             html.Div([
                 dcc.Graph(
                     id='clock-ring',
@@ -178,15 +211,16 @@ app.layout = html.Div([
                 )
             ], style={
                 'backgroundColor': '#fff',
-                'borderRadius': '12px',
-                'boxShadow': '0 2px 12px #f0f1f2',
-                'padding': '16px',
+                'borderRadius': '16px',
+                'boxShadow': '0 8px 32px rgba(0,0,0,0.1)',
+                'padding': '20px',
                 'margin': '0 8px',
                 'display': 'flex',
                 'flexDirection': 'column',
                 'justifyContent': 'center',   # 垂直居中
                 'alignItems': 'center',       # 水平居中
                 'height': '100%',
+                'border': '1px solid rgba(255,255,255,0.2)'
             })
         ], style={'width': '48%', 'display': 'flex', 'flexDirection': 'column', 'background': 'none', 'boxShadow': 'none', 'marginBottom': '0', 'height': '100%'}),
     ], style={'width': '100%', 'marginTop': '40px', 'padding': '0 10px', 'display': 'flex', 'alignItems': 'stretch', 'height': '480px'}),
@@ -202,13 +236,29 @@ app.layout = html.Div([
         html.Span("当前选中日期：", id='current-date-display'),
         html.Span(" | "),
         html.Span("数据文件数量：", id='data-count-display')
-    ], style={'textAlign': 'center', 'marginTop': '30px', 'color': '#7f8c8d'}),
+    ], style={
+        'textAlign': 'center', 
+        'marginTop': '30px', 
+        'color': '#718096',
+        'fontSize': '14px',
+        'fontWeight': '500'
+    }),
     
     # 版权信息
     html.Div([
         html.Span("copyright@github.com/Sigejiao/")
-    ], style={'textAlign': 'center', 'marginTop': '10px', 'color': '#7f8c8d'})
-], id='global-listener', n_clicks=0)
+    ], style={
+        'textAlign': 'center', 
+        'marginTop': '10px', 
+        'color': '#a0aec0',
+        'fontSize': '12px'
+    })
+], id='global-listener', n_clicks=0, style={
+    'background': 'linear-gradient(135deg, rgba(248, 209, 248, 0.2) 0%, rgba(248, 209, 248, 0.4) 25%, rgba(248, 179, 179, 0.6) 75%, rgba(248, 179, 179, 0.8) 100%)',
+    'minHeight': '100vh',
+    'padding': '20px',
+    'fontFamily': '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif'
+})
 
 def get_recent_dates(days):
     today = datetime.now().date()
