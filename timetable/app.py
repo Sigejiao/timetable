@@ -248,6 +248,20 @@ def update_bar_chart(all_data, days):
                                      f"事件: {event['event']}<br>" +
                                      f"时长: {duration/3600:.2f}小时<extra></extra>"
                     ))
+            if is_today and now_seconds is not None:
+                # 计算当前时间到24:00:00的秒数
+                end_of_day_sec = 24 * 3600
+                left = end_of_day_sec - now_seconds
+                if left > 0:
+                    fig.add_trace(go.Bar(
+                        x=[date],
+                        y=[left/3600],
+                        name='未来',
+                        base=now_seconds/3600,
+                        marker_color='#e0e0e0',
+                        showlegend=False,
+                        hovertemplate=f"<b>{date}</b><br>未来<extra></extra>"
+                    ))
     # 更新布局
     fig.update_layout(
         #title="每日时间分布",
