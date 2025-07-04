@@ -141,7 +141,9 @@ app.layout = html.Div([
                         'background': 'none',
                     },
                     style_data_conditional=[
-                        {'if': {'state': 'active'}, 'backgroundColor': 'transparent', 'border': 'none'}
+                        {'if': {'state': 'active'}, 'backgroundColor': 'transparent', 'border': 'none'},
+                        {'if': {'column_id': 'add-row'}, 'cursor': 'pointer'},
+                        {'if': {'column_id': 'delete-row'}, 'cursor': 'pointer'}
                     ],
                 )
             ], style={
