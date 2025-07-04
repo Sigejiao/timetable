@@ -549,10 +549,22 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, curr
         if column == 'add-row':
             # 插入新行
             if row < len(current_data):
+                # 计算新行的开始时间：被点击行的开始时间+1秒
+                clicked_start_time = current_data[row]['start_time']
+                new_start_time = ''
+                if clicked_start_time:
+                    try:
+                        # 解析时间并加1秒
+                        time_obj = datetime.strptime(clicked_start_time, "%H:%M:%S")
+                        new_time_obj = time_obj + timedelta(seconds=1)
+                        new_start_time = new_time_obj.strftime("%H:%M:%S")
+                    except ValueError:
+                        new_start_time = clicked_start_time  # 如果解析失败，使用原时间
+                
                 # 在指定行后插入新行
                 new_row = {
                     'add-row': '**+**',
-                    'start_time': '',
+                    'start_time': new_start_time,
                     'end_time': '',
                     'color': '',
                     'event': '',
