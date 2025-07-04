@@ -481,11 +481,21 @@ def update_and_save_schedule(selected_date, edited_data, current_data, current_d
     ctx = callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
 
-    def fill_row(e):
+    def fill_row(e, index, events):
+        # 计算结束时间：下一个事件的开始时间，或最后一个事件的特殊处理
+        if index < len(events) - 1:
+            end_time = events[index + 1].get('start_time', events[index + 1].get('time', ''))
+        else:
+            # 最后一个事件
+            if selected_date == datetime.now().strftime("%Y-%m-%d"):
+                end_time = datetime.now().strftime("%H:%M:%S")
+            else:
+                end_time = "23:59:59"
+        
         return {
             'add-row': '',
             'start_time': e.get('start_time', e.get('time', '')),
-            'end_time': '',
+            'end_time': end_time,
             'color': '',
             'event': e.get('event', ''),
             'duration': '',
@@ -495,7 +505,7 @@ def update_and_save_schedule(selected_date, edited_data, current_data, current_d
     if triggered == 'current-selected-date':
         # 切换日期，加载新数据
         events = data_manager.parse_time_events(selected_date)
-        table_data = [fill_row(e) for e in events]
+        table_data = [fill_row(e, i, events) for i, e in enumerate(events)]
         return table_data
     elif triggered == 'schedule-table':
         # 表格被编辑，自动保存
@@ -508,7 +518,7 @@ def update_and_save_schedule(selected_date, edited_data, current_data, current_d
         data_manager.save_day_data(current_date, save_data)
         # 重新加载，保证顺序
         events = data_manager.parse_time_events(current_date)
-        return [fill_row(e) for e in events]
+        return [fill_row(e, i, events) for i, e in enumerate(events)]
     else:
         # 默认返回当前数据
         return current_data
