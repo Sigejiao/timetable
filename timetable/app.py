@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, dash_table
+from dash import dcc, html, Input, Output, dash_table, State, callback_context
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from data_manager import DataManager
@@ -79,6 +79,20 @@ app.layout = html.Div([
         html.Div([
             html.H3("左侧区域", style={'textAlign': 'center', 'marginBottom': '10px'}),
             html.Div(id='left-panel', children=[
+                # 排序方式选择器
+                html.Div([
+                    html.Label('排序方式：', style={'fontWeight': 'bold', 'marginRight': '8px'}),
+                    dcc.Dropdown(
+                        id='schedule-sort-dropdown',
+                        options=[
+                            {'label': '按开始时间', 'value': 'start_time'},
+                            {'label': '按事件名称', 'value': 'event'}
+                        ],
+                        value='start_time',
+                        clearable=False,
+                        style={'width': '140px', 'display': 'inline-block'}
+                    )
+                ], style={'marginBottom': '10px', 'display': 'flex', 'alignItems': 'center'}),
                 # 新增空表格
                 dash_table.DataTable(
                     id='schedule-table',
@@ -104,10 +118,17 @@ app.layout = html.Div([
                     style_cell={
                         'padding': '4px 6px',
                         'fontSize': '14px',
-                        'textAlign': 'left',
                         'border': 'none',
                         'background': 'none',
                     },
+                    style_cell_conditional=[
+                        {'if': {'column_id': 'start_time'}, 'textAlign': 'left'},
+                        {'if': {'column_id': 'add-row'}, 'textAlign': 'left'},
+                        {'if': {'column_id': 'event'}, 'textAlign': 'left'},
+                        {'if': {'column_id': 'end_time'}, 'textAlign': 'right'},
+                        {'if': {'column_id': 'duration'}, 'textAlign': 'right'},
+                        {'if': {'column_id': 'delete-row'}, 'textAlign': 'right'},
+                    ],
                     style_header={
                         'backgroundColor': '#f8f9fa',
                         'fontWeight': 'bold',
@@ -418,7 +439,8 @@ def update_clock_ring(selected_date, all_data, n_intervals):
             y=0.8,  # 向上调整
             xanchor='left',
             yanchor='middle',
-            font=dict(size=12)
+            font=dict(size=12),
+            bgcolor='rgba(0,0,0,0)'
         )
     )
     return fig
@@ -446,6 +468,50 @@ def update_status_bar(selected_date, all_data):
     date_display = f"当前选中日期：{selected_date}"
     count_display = f"数据文件数量：{len(all_data) if all_data else 0}"
     return date_display, count_display
+
+# 合并表格数据加载与自动保存回调
+@app.callback(
+    Output('schedule-table', 'data'),
+    [Input('current-selected-date', 'data'),
+     Input('schedule-table', 'data')],
+    State('schedule-table', 'data'),
+    State('current-selected-date', 'data')
+)
+def update_and_save_schedule(selected_date, edited_data, current_data, current_date):
+    ctx = callback_context
+    triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
+
+    def fill_row(e):
+        return {
+            'add-row': '',
+            'start_time': e.get('start_time', e.get('time', '')),
+            'end_time': '',
+            'color': '',
+            'event': e.get('event', ''),
+            'duration': '',
+            'delete-row': ''
+        }
+
+    if triggered == 'current-selected-date':
+        # 切换日期，加载新数据
+        events = data_manager.parse_time_events(selected_date)
+        table_data = [fill_row(e) for e in events]
+        return table_data
+    elif triggered == 'schedule-table':
+        # 表格被编辑，自动保存
+        for row in edited_data:
+            if not row.get('event'):
+                row['event'] = '未命名'
+        save_data = [
+            {'time': row['start_time'], 'event': row['event']} for row in edited_data
+        ]
+        data_manager.save_day_data(current_date, save_data)
+        # 重新加载，保证顺序
+        events = data_manager.parse_time_events(current_date)
+        return [fill_row(e) for e in events]
+    else:
+        # 默认返回当前数据
+        return current_data
 
 # 运行应用
 if __name__ == '__main__':
