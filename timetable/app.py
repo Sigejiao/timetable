@@ -103,7 +103,7 @@ app.layout = html.Div([
                         {'name': '颜色示例', 'id': 'color', 'editable': False, 'presentation': 'markdown'},
                         {'name': '事件名称', 'id': 'event', 'editable': True},
                         {'name': '时长', 'id': 'duration', 'editable': False},
-                        {'name': 'x', 'id': 'delete-row', 'presentation': 'markdown'},
+                        {'name': 'X', 'id': 'delete-row', 'presentation': 'markdown'},
                     ],
                     data=[],
                     markdown_options={'html': True},
@@ -121,20 +121,14 @@ app.layout = html.Div([
                         'fontSize': '14px',
                         'border': 'none',
                         'background': 'none',
+                        'textAlign': 'left',
                     },
-                    style_cell_conditional=[
-                        {'if': {'column_id': 'start_time'}, 'textAlign': 'left'},
-                        {'if': {'column_id': 'add-row'}, 'textAlign': 'left'},
-                        {'if': {'column_id': 'end_time'}, 'textAlign': 'left'},
-                        {'if': {'column_id': 'color'}, 'textAlign': 'left'},
-                        {'if': {'column_id': 'event'}, 'textAlign': 'left'},
-                        {'if': {'column_id': 'duration'}, 'textAlign': 'right'},
-                        {'if': {'column_id': 'delete-row'}, 'textAlign': 'right'},
-                    ],
+                    style_cell_conditional=[],
                     style_header={
                         'backgroundColor': '#f8f9fa',
                         'fontWeight': 'bold',
                         'border': 'none',
+                        'textAlign': 'left',
                     },
                     style_data={
                         'border': 'none',
@@ -481,11 +475,12 @@ def update_status_bar(selected_date, all_data):
     Output('schedule-table', 'data'),
     [Input('current-selected-date', 'data'),
      Input('schedule-table', 'data'),
-     Input('schedule-table', 'active_cell')],
+     Input('schedule-table', 'active_cell'),
+     Input('schedule-sort-dropdown', 'value')],
     State('schedule-table', 'data'),
     State('current-selected-date', 'data')
 )
-def update_save_and_handle_buttons(selected_date, edited_data, active_cell, current_data, current_date):
+def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort_method, current_data, current_date):
     ctx = callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
 
@@ -526,9 +521,16 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, curr
             'delete-row': '**×**'
         }
 
-    if triggered == 'current-selected-date':
-        # 切换日期，加载新数据
+    if triggered == 'current-selected-date' or triggered == 'schedule-sort-dropdown':
+        # 切换日期或排序方式，加载新数据
         events = data_manager.parse_time_events(selected_date)
+        
+        # 根据排序方式处理数据
+        if sort_method == 'event':
+            # 按事件名称排序
+            events = sorted(events, key=lambda x: x.get('event', ''))
+        # 如果sort_method == 'start_time'，保持原有顺序（按时间排序）
+        
         table_data = [fill_row(e, i, events) for i, e in enumerate(events)]
         return table_data
     elif triggered == 'schedule-table' and 'data' in ctx.triggered[0]['prop_id']:
@@ -536,12 +538,26 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, curr
         for row in edited_data:
             if not row.get('event'):
                 row['event'] = '未命名'
-        save_data = [
-            {'time': row['start_time'], 'event': row['event']} for row in edited_data
-        ]
-        data_manager.save_day_data(current_date, save_data)
-        # 重新加载，保证顺序
-        events = data_manager.parse_time_events(current_date)
+        
+        # 根据排序方式决定保存时的排序
+        if sort_method == 'start_time':
+            # 按时间排序保存
+            save_data = [
+                {'time': row['start_time'], 'event': row['event']} for row in edited_data
+            ]
+            data_manager.save_day_data(current_date, save_data)
+            # 重新加载，保证时间顺序
+            events = data_manager.parse_time_events(current_date)
+        else:
+            # 按事件名称排序时，不重新排序保存，保持用户当前的顺序
+            save_data = [
+                {'time': row['start_time'], 'event': row['event']} for row in edited_data
+            ]
+            data_manager.save_day_data(current_date, save_data)
+            # 重新加载，但按事件名称排序
+            events = data_manager.parse_time_events(current_date)
+            events = sorted(events, key=lambda x: x.get('event', ''))
+        
         return [fill_row(e, i, events) for i, e in enumerate(events)]
     elif triggered == 'schedule-table' and 'active_cell' in ctx.triggered[0]['prop_id']:
         # 按钮操作
@@ -572,7 +588,7 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, curr
                     'start_time': new_start_time,
                     'end_time': '',
                     'color': '',
-                    'event': '',
+                    'event': f"{current_data[row]['event']}2",
                     'duration': '0.0',
                     'delete-row': '**×**'
                 }
@@ -582,8 +598,10 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, curr
                     {'time': r['start_time'], 'event': r['event']} for r in current_data
                 ]
                 data_manager.save_day_data(current_date, save_data)
-                # 重新加载数据
+                # 重新加载数据，根据排序方式处理
                 events = data_manager.parse_time_events(current_date)
+                if sort_method == 'event':
+                    events = sorted(events, key=lambda x: x.get('event', ''))
                 return [fill_row(e, i, events) for i, e in enumerate(events)]
         
         elif column == 'delete-row':
@@ -595,8 +613,10 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, curr
                     {'time': r['start_time'], 'event': r['event']} for r in current_data
                 ]
                 data_manager.save_day_data(current_date, save_data)
-                # 重新加载数据
+                # 重新加载数据，根据排序方式处理
                 events = data_manager.parse_time_events(current_date)
+                if sort_method == 'event':
+                    events = sorted(events, key=lambda x: x.get('event', ''))
                 return [fill_row(e, i, events) for i, e in enumerate(events)]
         
         return current_data
