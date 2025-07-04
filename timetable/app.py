@@ -197,7 +197,7 @@ app.layout = html.Div([
     html.Div([
         html.Span("copyright@github.com/Sigejiao/")
     ], style={'textAlign': 'center', 'marginTop': '10px', 'color': '#7f8c8d'})
-])
+], id='global-listener', n_clicks=0)
 
 def get_recent_dates(days):
     today = datetime.now().date()
@@ -479,19 +479,36 @@ def update_status_bar(selected_date, all_data):
     Input('schedule-table','data'),
     Input('schedule-table','active_cell'),
     Input('schedule-sort-dropdown','value'),
+    Input('global-listener', 'n_clicks'),
     State('schedule-table','data'),
     State('current-selected-date','data'),
 )
-def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort_method, current_data, current_date):
+def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort_method, global_clicks, current_data, current_date):
     ctx = callback_context
     triggered = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
 
-    def fill_row(e, index, events):
-        # 计算结束时间：下一个事件的开始时间，或最后一个事件的特殊处理
-        if index < len(events) - 1:
-            end_time = events[index + 1].get('start_time', events[index + 1].get('time', ''))
+    # 如果触发的是全局点击事件，清空活动单元格
+    if triggered == 'global-listener':
+        return current_data, None
+
+    def fill_row(e, index, events, original_events=None):
+        # 使用原始时间顺序的事件列表来计算结束时间
+        if original_events is None:
+            original_events = events
+        
+        # 找到当前事件在原始时间顺序中的位置
+        current_start_time = e.get('start_time', e.get('time', ''))
+        original_index = -1
+        for i, orig_event in enumerate(original_events):
+            if orig_event.get('start_time', orig_event.get('time', '')) == current_start_time and orig_event.get('event', '') == e.get('event', ''):
+                original_index = i
+                break
+        
+        # 计算结束时间：基于原始时间顺序的下一个事件
+        if original_index >= 0 and original_index < len(original_events) - 1:
+            end_time = original_events[original_index + 1].get('start_time', original_events[original_index + 1].get('time', ''))
         else:
-            # 最后一个事件
+            # 最后一个事件或找不到对应事件
             if selected_date == datetime.now().strftime("%Y-%m-%d"):
                 end_time = datetime.now().strftime("%H:%M:%S")
             else:
@@ -526,6 +543,7 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
     if triggered == 'current-selected-date' or triggered == 'schedule-sort-dropdown':
         # 切换日期或排序方式，加载新数据
         events = data_manager.parse_time_events(selected_date)
+        original_events = events.copy()  # 保存原始时间顺序
         
         # 根据排序方式处理数据
         if sort_method == 'event':
@@ -533,7 +551,7 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
             events = sorted(events, key=lambda x: x.get('event', ''))
         # 如果sort_method == 'start_time'，保持原有顺序（按时间排序）
         
-        table_data = [fill_row(e, i, events) for i, e in enumerate(events)]
+        table_data = [fill_row(e, i, events, original_events) for i, e in enumerate(events)]
         return table_data, active_cell
     elif triggered == 'schedule-table' and 'data' in ctx.triggered[0]['prop_id']:
         # 表格被编辑，自动保存
@@ -550,6 +568,7 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
             data_manager.save_day_data(current_date, save_data)
             # 重新加载，保证时间顺序
             events = data_manager.parse_time_events(current_date)
+            original_events = events.copy()
         else:
             # 按事件名称排序时，不重新排序保存，保持用户当前的顺序
             save_data = [
@@ -558,10 +577,11 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
             data_manager.save_day_data(current_date, save_data)
             # 重新加载，但按事件名称排序
             events = data_manager.parse_time_events(current_date)
+            original_events = events.copy()
             events = sorted(events, key=lambda x: x.get('event', ''))
         
         # 编辑操作时保持active_cell不变，这样编辑功能可以正常工作
-        return [fill_row(e, i, events) for i, e in enumerate(events)], active_cell
+        return [fill_row(e, i, events, original_events) for i, e in enumerate(events)], active_cell
     elif triggered == 'schedule-table' and 'active_cell' in ctx.triggered[0]['prop_id']:
         # 按钮操作
         if not active_cell or not current_data:
@@ -603,10 +623,11 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
                 data_manager.save_day_data(current_date, save_data)
                 # 重新加载数据，根据排序方式处理
                 events = data_manager.parse_time_events(current_date)
+                original_events = events.copy()
                 if sort_method == 'event':
                     events = sorted(events, key=lambda x: x.get('event', ''))
                 # 只有按钮操作才重置active_cell
-                return [fill_row(e, i, events) for i, e in enumerate(events)], None
+                return [fill_row(e, i, events, original_events) for i, e in enumerate(events)], None
         
         elif column == 'delete-row':
             # 删除行
@@ -619,10 +640,11 @@ def update_save_and_handle_buttons(selected_date, edited_data, active_cell, sort
                 data_manager.save_day_data(current_date, save_data)
                 # 重新加载数据，根据排序方式处理
                 events = data_manager.parse_time_events(current_date)
+                original_events = events.copy()
                 if sort_method == 'event':
                     events = sorted(events, key=lambda x: x.get('event', ''))
                 # 只有按钮操作才重置active_cell
-                return [fill_row(e, i, events) for i, e in enumerate(events)], None
+                return [fill_row(e, i, events, original_events) for i, e in enumerate(events)], None
         
         # 其他单元格点击保持active_cell不变
         return current_data, active_cell
